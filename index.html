@@ -1,0 +1,910 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Kitchen">
+<meta name="theme-color" content="#1f6f54">
+<title>Kitchen</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231f6f54'/%3E%3Cpath d='M20 12h24v40l-4-3-4 3-4-3-4 3-4-3-4 3z' fill='%23fff'/%3E%3Cpath d='M25 22h14M25 29h14M25 36h9' stroke='%231f6f54' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<style>
+  :root {
+    --bg: #f5f4f0; --card: #ffffff; --ink: #1c1d1a; --muted: #6b6d66; --line: #e3e1da;
+    --accent: #1f6f54; --accent-ink: #ffffff; --warn: #a65a00; --warn-bg: #fff3df;
+    --bad: #a3271f; --bad-bg: #fdecea; --good-bg: #e6f3ee;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151614; --card: #1f211e; --ink: #ecebe6; --muted: #a0a29a; --line: #33352f;
+      --accent: #4fb592; --accent-ink: #0c1f18; --warn: #f0b35c; --warn-bg: #3a2c14;
+      --bad: #f08a80; --bad-bg: #3a1b18; --good-bg: #17302a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px 6px; max-width: 560px; margin: 0 auto; }
+  header h1 { font-size: 20px; margin: 0; letter-spacing: -0.01em; }
+  header h1 small { font-weight: 400; color: var(--muted); font-size: 14px; margin-left: 6px; }
+  main { max-width: 560px; margin: 0 auto; padding: 8px 16px 40px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin: 12px 0; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin: 22px 4px 4px; font-weight: 600; }
+  button, .btn { font: inherit; color: inherit; cursor: pointer; }
+  .primary {
+    display: block; width: 100%; padding: 20px 16px; border: 0; border-radius: 14px;
+    background: var(--accent); color: var(--accent-ink); font-size: 19px; font-weight: 650;
+  }
+  .primary:active { filter: brightness(0.93); }
+  .secondary { display: block; width: 100%; padding: 13px 16px; border: 1px solid var(--line); border-radius: 12px; background: var(--card); font-weight: 550; }
+  .quiet { background: none; border: 0; color: var(--accent); padding: 10px 6px; font-weight: 550; }
+  .danger { color: var(--bad); }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; }
+  .row > * { flex: 1 1 0; }
+  .center { text-align: center; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  .icon-btn { background: none; border: 0; padding: 8px; border-radius: 10px; color: var(--muted); }
+  .muted { color: var(--muted); }
+  .small { font-size: 14px; }
+  [hidden] { display: none !important; }
+
+  #status { display: flex; align-items: center; gap: 12px; }
+  .spinner { width: 22px; height: 22px; border-radius: 50%; border: 3px solid var(--line); border-top-color: var(--accent); animation: spin 0.9s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
+
+  .note { border-radius: 12px; padding: 12px 14px; margin: 12px 0; }
+  .note.good { background: var(--good-bg); }
+  .note.warn { background: var(--warn-bg); color: var(--warn); }
+  .note.bad { background: var(--bad-bg); color: var(--bad); }
+
+  .rhead { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+  .rhead .amount { font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .lines { list-style: none; margin: 10px 0 0; padding: 0; border-top: 1px solid var(--line); }
+  .lines li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  .lines li:last-child { border-bottom: 0; }
+  .lines .name { min-width: 0; overflow-wrap: anywhere; }
+  .lines .sub { display: block; color: var(--muted); font-size: 13px; }
+  .lines .amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .tag { display: inline-block; font-size: 12px; padding: 1px 7px; border-radius: 999px; background: var(--warn-bg); color: var(--warn); margin-left: 6px; vertical-align: 1px; }
+  details.card { padding: 0; }
+  details.card > summary { list-style: none; padding: 14px 16px; cursor: pointer; }
+  details.card > summary::-webkit-details-marker { display: none; }
+  details.card > .inner { padding: 0 16px 12px; }
+
+  label { display: block; font-weight: 550; margin: 14px 0 6px; }
+  input[type=text], input[type=url], input[type=password] {
+    width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
+    background: var(--bg); color: var(--ink); font: inherit;
+  }
+  footer { text-align: center; color: var(--muted); font-size: 13px; padding: 10px 0 30px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kitchen <small>receipts</small></h1>
+  <button class="icon-btn" id="btnSettings" aria-label="Settings">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>
+  </button>
+</header>
+
+<main>
+  <!-- Settings (shown on first run, or from the gear) -->
+  <section id="settings" class="card" hidden>
+    <strong>Connection</strong>
+    <p class="muted small" style="margin:6px 0 0">Paste the two values printed by <code>setup</code> and by the web app deployment. They stay on this device only.</p>
+    <label for="cfgUrl">Web app URL</label>
+    <input id="cfgUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/.../exec">
+    <label for="cfgToken">Token</label>
+    <input id="cfgToken" type="text" autocomplete="off" autocapitalize="off" spellcheck="false">
+    <div style="height:16px"></div>
+    <button class="primary" id="btnSaveCfg" style="padding:14px;font-size:17px">Save and test</button>
+    <div id="cfgMsg" class="note" hidden></div>
+    <div class="row" style="margin-top:6px">
+      <button class="quiet" id="btnCopyLink" hidden>Copy link for another device</button>
+      <a class="quiet center" id="lnkSheet" target="_blank" rel="noopener" hidden>Open the sheet</a>
+    </div>
+    <button class="quiet" id="btnCloseCfg">Close</button>
+  </section>
+
+  <!-- Scan -->
+  <section id="scan">
+    <div style="height:8px"></div>
+    <button class="primary" id="btnScan">Scan a receipt</button>
+    <div class="row center">
+      <button class="quiet" id="btnLong">Long receipt</button>
+      <button class="quiet" id="btnPick">Choose a photo</button>
+    </div>
+  </section>
+
+  <section id="multi" class="card" hidden>
+    <strong id="multiCount">Long receipt</strong>
+    <p class="muted small" style="margin:6px 0 12px">Photograph the receipt from top to bottom in parts. Let each photo overlap the previous one by a line or two.</p>
+    <button class="primary" id="btnNextPart" style="padding:16px">Take the first part</button>
+    <div class="row" style="margin-top:10px">
+      <button class="secondary" id="btnMultiDone" disabled>Done, save it</button>
+      <button class="secondary danger" id="btnMultiCancel">Cancel</button>
+    </div>
+  </section>
+
+  <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
+  <input type="file" id="filePick" accept="image/*" multiple hidden>
+
+  <section id="status" class="card" hidden>
+    <div class="spinner"></div><div id="statusText">Working</div>
+  </section>
+
+  <section id="message" hidden></section>
+  <section id="result" hidden></section>
+
+  <h2 id="recentTitle" hidden>Last scanned</h2>
+  <section id="recent"></section>
+</main>
+
+<footer><span id="ver"></span></footer>
+
+<script>
+'use strict';
+const APP_VERSION = '1.0.0';
+
+/* =====================================================================
+   K: pure logic. No DOM, no network. Everything here is covered by
+   tests/logic.test.js. Keep it pure so it stays testable.
+   ===================================================================== */
+const K = (() => {
+
+  // Column order of the two tabs. The backend creates missing columns by name,
+  // so adding a column here is enough: no backend change, no sheet edit.
+  const RECEIPT_COLS = ['receipt_id', 'date', 'time', 'shop', 'shop_type', 'location', 'type', 'item', 'item_raw',
+    'code', 'qty', 'unit', 'unit_price', 'total', 'pack_size', 'pack_unit', 'flag', 'added_at'];
+  const PRODUCT_COLS = ['code', 'name', 'brand', 'pack_size', 'pack_unit', 'source', 'updated_at'];
+
+  const PROMPT = [
+    'You are reading a photo of ONE store receipt, most likely from Quebec, Canada, and usually printed in French.',
+    'If there are several images, they are consecutive parts of the same receipt, top to bottom, and they may overlap: list every purchased line exactly once.',
+    '',
+    'Return ONLY one JSON object. No explanation, no code fence. Use this exact shape:',
+    '{',
+    '  "shop": "store or restaurant name as a customer would say it, e.g. Maxi, Costco, Pharmaprix",',
+    '  "shop_type": "grocery" | "restaurant" | "pharmacy" | "online" | "other",',
+    '  "location": "branch name or street address as printed, or empty string",',
+    '  "date": "YYYY-MM-DD, or empty string if not readable",',
+    '  "time": "HH:MM in 24h, or empty string if not readable",',
+    '  "lines": [',
+    '    {',
+    '      "type": "item" | "discount" | "fee" | "tip",',
+    '      "raw": "the line text exactly as printed",',
+    '      "name": "readable product name with abbreviations expanded, in the language of the receipt",',
+    '      "code": "the product number printed on that line (UPC, PLU or SKU), digits as printed, or empty string",',
+    '      "qty": 1,',
+    '      "unit": "unit" | "kg" | "g" | "lb" | "l" | "ml",',
+    '      "unit_price": 0.00,',
+    '      "total": 0.00,',
+    '      "pack_size": null,',
+    '      "pack_unit": null,',
+    '      "unreadable": false',
+    '    }',
+    '  ],',
+    '  "taxes": [ { "name": "TPS", "amount": 0.00 }, { "name": "TVQ", "amount": 0.00 } ],',
+    '  "subtotal": 0.00,',
+    '  "total": 0.00',
+    '}',
+    '',
+    'Rules:',
+    '- All numbers are JSON numbers with a dot as decimal separator. Never use a comma in a number.',
+    '- "total" of a line is the amount charged for that line before tax. The top-level "total" is the grand total paid, taxes included.',
+    '- Items sold by count: "qty" is the number of packages and "unit" is "unit". Items sold by weight or volume: "qty" is the weight or volume printed and "unit" is its unit; "unit_price" is the price per that unit.',
+    '- A discount, coupon or rebate printed under an item belongs to that item: subtract it from that item total and do not list it separately. A discount that applies to the whole receipt, or that you cannot attach to one item, is its own line with type "discount" and a negative total.',
+    '- Bottle deposits (consigne), bag charges and eco fees are type "fee". A tip is type "tip". Taxes go only in "taxes", never in "lines".',
+    '- "pack_size" and "pack_unit" describe ONE package (for example 750 and "g", 2 and "l", 12 and "unit"). Fill them only when the size is printed on the line. Otherwise use null. Do not guess.',
+    '- Leave out payment lines, change, card details, loyalty points and store slogans. Never copy a card number.',
+    '- If part of a line is hard to read, still include the line with your best reading and set "unreadable" to true.',
+    '- If a value is not on the receipt, use an empty string for text and null for numbers.'
+  ].join('\n');
+
+  /* ---------- small helpers ---------- */
+
+  const round2 = n => Math.round((n + Number.EPSILON) * 100) / 100;
+
+  function text(v) { return (v === null || v === undefined) ? '' : String(v).replace(/\s+/g, ' ').trim(); }
+
+  /** Accepts 12.5, "12.5", "12,50", "1 234,56 $", "3,00-". Returns a number or null. */
+  function toNumber(v) {
+    if (v === null || v === undefined || v === '') return null;
+    if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+    let s = String(v).replace(/[\s $]/g, '');
+    if (!s) return null;
+    if (/-$/.test(s)) s = '-' + s.slice(0, -1);
+    if (s.includes(',') && s.includes('.')) {
+      s = (s.lastIndexOf(',') > s.lastIndexOf('.')) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+    } else {
+      s = s.replace(',', '.');
+    }
+    if (!/^-?\d*\.?\d+$/.test(s)) return null;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : null;
+  }
+
+  function slug(v) {
+    return text(v).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24);
+  }
+
+  function pad2(n) { return String(n).padStart(2, '0'); }
+  function localDate(d) { return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+  function localStamp(d) { return localDate(d) + 'T' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + ':' + pad2(d.getSeconds()); }
+
+  /** Returns YYYY-MM-DD, or '' if missing, malformed, impossible or in the future. */
+  function normDate(v, today) {
+    const m = text(v).match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (!m) return '';
+    const y = +m[1], mo = +m[2], d = +m[3];
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+    if (y < 2000) return '';
+    const iso = y + '-' + pad2(mo) + '-' + pad2(d);
+    if (today && iso > today) return '';
+    return iso;
+  }
+
+  /** Returns HH:MM (24h) or ''. */
+  function normTime(v) {
+    const m = text(v).toLowerCase().match(/^(\d{1,2})\s*[:h]\s*(\d{2})(?::\d{2})?\s*(am|pm)?/);
+    if (!m) return '';
+    let h = +m[1]; const mi = +m[2];
+    if (m[3] === 'pm' && h < 12) h += 12;
+    if (m[3] === 'am' && h === 12) h = 0;
+    if (h > 23 || mi > 59) return '';
+    return pad2(h) + ':' + pad2(mi);
+  }
+
+  /* ---------- units ---------- */
+
+  const COUNT_WORDS = ['unit', 'units', 'un', 'unite', 'unites', 'u', 'ea', 'each', 'ch', 'pc', 'pcs', 'piece', 'pieces',
+    'pk', 'pqt', 'pack', 'paquet', 'ct', 'count', 'x', 'oeufs', 'eggs', 'sachets', 'tranches', 'portions', 'rouleaux', 'capsules'];
+  // factor to the base unit: grams for weight, millilitres for volume
+  const WEIGHT = { g: 1, gr: 1, gramme: 1, grammes: 1, gram: 1, grams: 1, kg: 1000, kilo: 1000, mg: 0.001, lb: 453.592, lbs: 453.592, oz: 28.3495 };
+  const VOLUME = { ml: 1, l: 1000, lt: 1000, litre: 1000, litres: 1000, liter: 1000, liters: 1000, cl: 10, dl: 100, floz: 29.5735 };
+
+  function unitKey(u) {
+    return text(u).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[.\s]/g, '');
+  }
+
+  /** Unit of a receipt quantity. One of: unit, kg, g, lb, l, ml. Unknown means sold by count. */
+  function normUnit(u) {
+    const k = unitKey(u);
+    if (k === 'kg' || k === 'kilo') return 'kg';
+    if (k === 'lb' || k === 'lbs') return 'lb';
+    if (k === 'l' || k === 'lt' || k === 'litre' || k === 'liter') return 'l';
+    if (k === 'ml') return 'ml';
+    if (k === 'g' || k === 'gr') return 'g';
+    return 'unit';
+  }
+
+  /** Converts a pack size to its base unit. Returns {size, unit} with unit g, ml or unit, or null. */
+  function toBase(size, unit) {
+    const n = toNumber(size);
+    if (n === null || n <= 0) return null;
+    const k = unitKey(unit);
+    if (k in WEIGHT) return { size: round2(n * WEIGHT[k]), unit: 'g' };
+    if (k in VOLUME) return { size: round2(n * VOLUME[k]), unit: 'ml' };
+    if (COUNT_WORDS.includes(k)) return { size: round2(n), unit: 'unit' };
+    return null;
+  }
+
+  /** Reads a free-text quantity such as "750 g", "1,89 L", "12 x 355 mL", "6 un". */
+  function parseQuantity(v) {
+    const s = text(v).toLowerCase().replace(/,/g, '.').replace(/fl\.?\s*oz/g, 'floz');
+    if (!s) return null;
+    const num = '(\\d+(?:\\.\\d+)?)';
+    const multi = s.match(new RegExp(num + '\\s*[x×*]\\s*' + num + '\\s*([a-zà-ÿ]+)'));
+    if (multi) {
+      const one = toBase(multi[2], multi[3]);
+      if (one) return { size: round2(one.size * Number(multi[1])), unit: one.unit };
+    }
+    for (const m of s.matchAll(new RegExp(num + '\\s*([a-zà-ÿ]+)', 'g'))) {
+      const one = toBase(m[1], m[2]);
+      if (one) return one;
+    }
+    return null;
+  }
+
+  /* ---------- barcodes ---------- */
+
+  /** Check digit for the data digits of a GTIN (UPC-A, EAN-13, EAN-8). */
+  function gtinCheck(data) {
+    let sum = 0;
+    for (let i = data.length - 1, w = 3; i >= 0; i--, w = 4 - w) sum += (data.charCodeAt(i) - 48) * w;
+    return String((10 - (sum % 10)) % 10);
+  }
+  function gtinValid(code) {
+    return /^\d+$/.test(code) && [8, 12, 13, 14].includes(code.length) && gtinCheck(code.slice(0, -1)) === code.slice(-1);
+  }
+
+  /**
+   * A receipt may print a barcode in full, without its check digit, or without
+   * its leading zero. Returns the barcodes worth trying, most likely first.
+   */
+  function upcCandidates(raw) {
+    const d = text(raw).replace(/\D/g, '');
+    const out = [];
+    const add = c => { if (!out.includes(c)) out.push(c); };
+    if (gtinValid(d)) add(d);
+    if (d.length === 11) {
+      if (gtinValid('0' + d)) add('0' + d);
+      add(d + gtinCheck(d));
+    } else if (d.length === 10) {
+      if (gtinValid('00' + d)) add('00' + d);
+      add('0' + d + gtinCheck('0' + d));
+    } else if (d.length === 12 && !gtinValid(d)) {
+      add(d + gtinCheck(d));
+    }
+    return out;
+  }
+
+  /**
+   * Key of a product in the Products tab. A real barcode is its own key. A short
+   * store-internal number (Costco item number, PLU) only means something inside
+   * that shop, so it is prefixed with the shop.
+   */
+  function productKey(shop, code) {
+    const c = text(code).replace(/\s+/g, '');
+    if (!c) return '';
+    if (/^\d{10,14}$/.test(c)) return c;
+    if (!/^[A-Za-z0-9-]{3,}$/.test(c)) return '';
+    const s = slug(shop);
+    return s ? s + ':' + c.toUpperCase() : '';
+  }
+
+  /** Pack size from an Open Food Facts product record. */
+  function packFromOff(p) {
+    if (!p) return null;
+    const fromText = parseQuantity(p.quantity);
+    const q = toNumber(p.product_quantity);
+    if (q !== null && q > 0) {
+      const u = unitKey(p.product_quantity_unit);
+      if (u) { const b = toBase(q, u); if (b) return b; }
+      if (fromText && fromText.unit !== 'unit') return { size: round2(q), unit: fromText.unit };
+    }
+    return fromText;
+  }
+
+  /* ---------- AI answer -> receipt ---------- */
+
+  function extractJson(answer) {
+    let s = String(answer || '').trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const a = s.indexOf('{'), b = s.lastIndexOf('}');
+    if (a < 0 || b <= a) throw new Error('The receipt could not be read. Try again with a sharper photo.');
+    try { return JSON.parse(s.slice(a, b + 1)); }
+    catch (e) { throw new Error('The receipt could not be read (incomplete answer). For a long receipt, use "Long receipt".'); }
+  }
+
+  const LINE_TYPES = ['item', 'discount', 'fee', 'tip'];
+  const SHOP_TYPES = ['grocery', 'restaurant', 'pharmacy', 'online', 'other'];
+
+  /** Cleans whatever the model returned into a predictable structure. Never throws on odd values. */
+  function normalizeReceipt(p, today) {
+    if (!p || !Array.isArray(p.lines) || !p.lines.length) throw new Error('No purchase lines were found on this photo.');
+    const flags = [];
+    let date = normDate(p.date, today);
+    if (!date) { date = today; flags.push('date_guessed'); }
+
+    const lines = p.lines.filter(l => l && typeof l === 'object').map(l => {
+      const type = LINE_TYPES.includes(l.type) ? l.type : 'item';
+      let total = toNumber(l.total);
+      let unreadable = !!l.unreadable;
+      if (total === null) unreadable = true;
+      else if (type === 'discount' && total > 0) total = -total;
+      let qty = toNumber(l.qty);
+      if (qty === null || qty <= 0) qty = 1;
+      const unit = normUnit(l.unit);
+      let unitPrice = toNumber(l.unit_price);
+      if (unitPrice === null && total !== null) unitPrice = round2(total / qty);
+      const raw = text(l.raw);
+      return {
+        type, raw, name: text(l.name) || raw || '(unreadable line)', code: text(l.code).replace(/\s+/g, ''),
+        qty, unit, unitPrice, total: total === null ? null : round2(total),
+        pack: toBase(l.pack_size, l.pack_unit), packSource: '', unreadable
+      };
+    });
+    if (!lines.length) throw new Error('No purchase lines were found on this photo.');
+
+    const taxes = (Array.isArray(p.taxes) ? p.taxes : []).map(t => ({ name: text(t && t.name) || 'Tax', amount: toNumber(t && t.amount) }))
+      .filter(t => t.amount !== null && t.amount !== 0).map(t => ({ name: t.name, amount: round2(t.amount) }));
+
+    const shopType = SHOP_TYPES.includes(p.shop_type) ? p.shop_type : 'other';
+    return {
+      shop: text(p.shop) || 'Unknown', shopType, location: text(p.location),
+      date, time: normTime(p.time), lines, taxes, total: toNumber(p.total), flags
+    };
+  }
+
+  /**
+   * Fills the pack size of each counted item. Order of trust:
+   *   1. the Products tab (anything corrected there by hand wins forever)
+   *   2. Open Food Facts, by barcode
+   *   3. what was printed on the receipt line
+   * Returns the rows to add to the Products tab.
+   * products: Map(key -> {size, unit}). lookup(candidates) -> {size, unit, name, brand} or null.
+   */
+  async function resolvePacks(rec, products, lookup, nowStamp) {
+    const fresh = new Map();
+    const targets = rec.lines.filter(l => l.type === 'item' && l.unit === 'unit');
+    const pending = new Map();
+
+    for (const l of targets) {
+      const key = productKey(rec.shop, l.code);
+      l.key = key;
+      if (key && products.has(key)) { l.pack = products.get(key); l.packSource = 'products'; continue; }
+      const cands = upcCandidates(l.code);
+      if (key && cands.length && lookup && !pending.has(key)) pending.set(key, cands);
+    }
+
+    const found = new Map();
+    const jobs = Array.from(pending.entries());
+    const worker = async () => {
+      while (jobs.length) {
+        const [key, cands] = jobs.shift();
+        try { const hit = await lookup(cands); if (hit && hit.size > 0) found.set(key, hit); } catch (e) { /* a failed lookup is not an error */ }
+      }
+    };
+    await Promise.all([worker(), worker(), worker(), worker(), worker()]);
+
+    for (const l of targets) {
+      if (l.packSource === 'products') continue;
+      const hit = l.key ? found.get(l.key) : null;
+      if (hit) { l.pack = { size: hit.size, unit: hit.unit }; l.packSource = 'openfoodfacts'; }
+      else if (l.pack) l.packSource = 'receipt';
+      if (l.key && l.pack && !fresh.has(l.key)) {
+        fresh.set(l.key, {
+          code: l.key, name: (hit && hit.name) || l.name, brand: (hit && hit.brand) || '',
+          pack_size: l.pack.size, pack_unit: l.pack.unit, source: l.packSource, updated_at: nowStamp
+        });
+      }
+    }
+    return Array.from(fresh.values());
+  }
+
+  /** Receipt -> rows for the Receipts tab. The rows of one receipt add up to what was paid. */
+  function buildRows(rec, nowStamp) {
+    const body = [];
+    for (const l of rec.lines) {
+      const flags = [];
+      if (l.unreadable) flags.push('unreadable');
+      const counted = l.type === 'item' && l.unit === 'unit';
+      if (counted && !l.pack && rec.shopType !== 'restaurant') flags.push('no_pack_size');
+      body.push({
+        type: l.type, item: l.name, item_raw: l.raw, code: l.code, qty: l.qty, unit: l.unit,
+        unit_price: l.unitPrice === null ? '' : l.unitPrice, total: l.total === null ? '' : l.total,
+        pack_size: counted && l.pack ? l.pack.size : '', pack_unit: counted && l.pack ? l.pack.unit : '', flags
+      });
+    }
+    for (const t of rec.taxes) {
+      body.push({ type: 'tax', item: t.name, item_raw: '', code: '', qty: 1, unit: 'unit', unit_price: t.amount, total: t.amount, pack_size: '', pack_unit: '', flags: [] });
+    }
+
+    const sum = round2(body.reduce((a, r) => a + (typeof r.total === 'number' ? r.total : 0), 0));
+    const printed = rec.total === null ? null : round2(rec.total);
+    const shared = rec.flags.slice();
+    let mismatch = false;
+    if (printed === null) shared.push('no_total');
+    else if (Math.abs(printed - sum) > 0.02) { mismatch = true; shared.push('total_mismatch'); }
+
+    // Same shop, date, time and amount = same receipt. This id is what refuses a double scan.
+    const cents = Math.round((printed === null ? sum : printed) * 100);
+    const receiptId = [rec.date.replace(/-/g, ''), (rec.time || '00:00').replace(':', ''), slug(rec.shop) || 'shop', cents].join('-');
+
+    const rows = body.map(r => {
+      const row = {
+        receipt_id: receiptId, date: rec.date, time: rec.time, shop: rec.shop, shop_type: rec.shopType, location: rec.location,
+        type: r.type, item: r.item, item_raw: r.item_raw, code: r.code, qty: r.qty, unit: r.unit, unit_price: r.unit_price,
+        total: r.total, pack_size: r.pack_size, pack_unit: r.pack_unit, flag: r.flags.concat(shared).join(','), added_at: nowStamp
+      };
+      const ordered = {};
+      for (const c of RECEIPT_COLS) ordered[c] = row[c];
+      return ordered;
+    });
+    return { receiptId, rows, sum, printed, mismatch, items: rec.lines.filter(l => l.type === 'item').length };
+  }
+
+  /** Sheet rows (as returned by the backend) -> receipts, newest first. */
+  function groupReceipts(headers, rows) {
+    const col = name => headers.indexOf(name);
+    const iId = col('receipt_id');
+    if (iId < 0) return [];
+    const get = (r, name) => { const i = col(name); return i < 0 ? '' : r[i]; };
+    const byId = new Map();
+    rows.forEach(r => {
+      const id = text(r[iId]);
+      if (!id) return;
+      if (!byId.has(id)) {
+        byId.set(id, { id, date: text(get(r, 'date')).slice(0, 10), time: text(get(r, 'time')), shop: text(get(r, 'shop')), total: 0, items: 0, flagged: false, lines: [] });
+      }
+      const g = byId.get(id);
+      const total = toNumber(get(r, 'total'));
+      const type = text(get(r, 'type')) || 'item';
+      const flag = text(get(r, 'flag'));
+      g.total = round2(g.total + (total || 0));
+      if (type === 'item') g.items++;
+      if (/unreadable|total_mismatch|no_total|date_guessed/.test(flag)) g.flagged = true;
+      g.lines.push({
+        type, name: text(get(r, 'item')), qty: toNumber(get(r, 'qty')), unit: text(get(r, 'unit')), total,
+        packSize: toNumber(get(r, 'pack_size')), packUnit: text(get(r, 'pack_unit')), flag
+      });
+    });
+    return Array.from(byId.values()).reverse();
+  }
+
+  /** Products tab rows -> Map(key -> {size, unit}). Later rows win, so a correction can simply be added below. */
+  function productsMap(headers, rows) {
+    const map = new Map();
+    const iCode = headers.indexOf('code'), iSize = headers.indexOf('pack_size'), iUnit = headers.indexOf('pack_unit');
+    if (iCode < 0 || iSize < 0 || iUnit < 0) return map;
+    rows.forEach(r => {
+      const key = text(r[iCode]);
+      const pack = toBase(r[iSize], r[iUnit]);
+      if (key && pack) map.set(key, pack);
+    });
+    return map;
+  }
+
+  return {
+    RECEIPT_COLS, PRODUCT_COLS, PROMPT, round2, text, toNumber, slug, localDate, localStamp, normDate, normTime, normUnit,
+    toBase, parseQuantity, gtinCheck, gtinValid, upcCandidates, productKey, packFromOff, extractJson, normalizeReceipt,
+    resolvePacks, buildRows, groupReceipts, productsMap
+  };
+})();
+
+/* =====================================================================
+   Network
+   ===================================================================== */
+
+const store = {
+  get(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode: settings last for this visit only */ } }
+};
+const cfg = { url: store.get('kitchen.url'), token: store.get('kitchen.token'), sheetUrl: store.get('kitchen.sheetUrl') };
+
+/**
+ * One POST per call to the Apps Script web app. The body is sent as text/plain on
+ * purpose: that keeps the request "simple", so the browser sends no CORS preflight,
+ * which Apps Script cannot answer.
+ */
+async function api(action, payload) {
+  if (!cfg.url || !cfg.token) throw new Error('Not connected yet. Open Settings (the gear) first.');
+  let res;
+  try {
+    res = await fetch(cfg.url, {
+      method: 'POST', redirect: 'follow',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(Object.assign({ token: cfg.token, action }, payload || {}))
+    });
+  } catch (e) {
+    throw new Error('Could not reach the backend. Check the connection, or the web app URL in Settings.');
+  }
+  const body = await res.text();
+  let data;
+  try { data = JSON.parse(body); }
+  catch (e) { throw new Error('The web app URL did not answer as expected. Check it in Settings (it must end with /exec).'); }
+  if (!data.ok) throw new Error(data.error || 'The backend reported an error.');
+  return data;
+}
+
+/** Open Food Facts: free, no key. Returns {size, unit, name, brand} or null. Never throws. */
+async function offLookup(candidates) {
+  for (const code of candidates.slice(0, 2)) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 7000);
+    try {
+      const r = await fetch('https://world.openfoodfacts.org/api/v2/product/' + code +
+        '.json?fields=code,product_name,product_name_fr,brands,quantity,product_quantity,product_quantity_unit', { signal: ctl.signal });
+      if (!r.ok) continue;
+      const j = await r.json();
+      if (!j || j.status !== 1 || !j.product) continue;
+      const pack = K.packFromOff(j.product);
+      if (!pack) continue;
+      return { size: pack.size, unit: pack.unit, name: K.text(j.product.product_name_fr || j.product.product_name), brand: K.text(j.product.brands) };
+    } catch (e) { /* offline, blocked or slow: fall back to the receipt text */ }
+    finally { clearTimeout(timer); }
+  }
+  return null;
+}
+
+/** Shrinks a photo to a JPEG the AI can read. The photo only ever lives in memory. */
+async function fileToJpeg(file, maxEdge, quality) {
+  maxEdge = maxEdge || 2400; quality = quality || 0.85;
+  let src;
+  try { src = await createImageBitmap(file, { imageOrientation: 'from-image' }); }
+  catch (e) {
+    src = await new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('This file is not a photo the phone can open.')); };
+      img.src = url;
+    });
+  }
+  const w = src.width, h = src.height;
+  const scale = Math.min(1, maxEdge / Math.max(w, h));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(w * scale));
+  canvas.height = Math.max(1, Math.round(h * scale));
+  canvas.getContext('2d').drawImage(src, 0, 0, canvas.width, canvas.height);
+  if (src.close) src.close();
+  const dataUrl = canvas.toDataURL('image/jpeg', quality);
+  canvas.width = canvas.height = 0;
+  return { mimeType: 'image/jpeg', data: dataUrl.slice(dataUrl.indexOf(',') + 1) };
+}
+
+/* =====================================================================
+   Screen
+   ===================================================================== */
+
+const $ = id => document.getElementById(id);
+const money = n => (typeof n === 'number')
+  ? new Intl.NumberFormat('fr-CA', { style: 'currency', currency: 'CAD' }).format(n) : '';
+
+function el(tag, attrs, children) {
+  const node = document.createElement(tag);
+  Object.entries(attrs || {}).forEach(([k, v]) => {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  });
+  (children || []).forEach(c => { if (c) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return node;
+}
+
+let busy = false;
+function setBusy(on, label) {
+  busy = on;
+  $('status').hidden = !on;
+  if (label) $('statusText').textContent = label;
+  ['btnScan', 'btnLong', 'btnPick', 'btnNextPart', 'btnMultiDone', 'btnMultiCancel'].forEach(id => { $(id).disabled = on; });
+  if (!on) renderMulti();
+}
+function showMessage(kind, textValue) {
+  const box = $('message');
+  box.replaceChildren(el('div', { class: 'note ' + kind, text: textValue }));
+  box.hidden = false;
+}
+function clearOutput() { $('message').hidden = true; $('result').hidden = true; }
+
+function lineDetail(l) {
+  const bits = [];
+  if (l.unit && l.unit !== 'unit') bits.push((l.qty === null ? '' : String(l.qty).replace('.', ',')) + ' ' + l.unit);
+  else if (l.qty && l.qty !== 1) bits.push(l.qty + ' x');
+  if (l.packSize) bits.push(String(l.packSize).replace('.', ',') + ' ' + (l.packUnit === 'unit' ? 'per pack' : l.packUnit));
+  return bits.join(' · ');
+}
+
+function linesList(lines) {
+  return el('ul', { class: 'lines' }, lines.map(l => {
+    const name = el('span', { class: 'name' }, [l.name || '(no name)']);
+    if (/unreadable/.test(l.flag || '')) name.appendChild(el('span', { class: 'tag', text: 'hard to read' }));
+    const detail = lineDetail(l);
+    if (detail) name.appendChild(el('span', { class: 'sub', text: detail }));
+    return el('li', {}, [name, el('span', { class: 'amt', text: money(l.total) })]);
+  }));
+}
+
+function deleteButton(id, after) {
+  return el('button', {
+    class: 'quiet danger', text: 'Delete this receipt',
+    onclick: async () => {
+      if (busy || !confirm('Delete this receipt from the sheet?')) return;
+      setBusy(true, 'Deleting');
+      try {
+        await api('remove', { tab: 'Receipts', column: 'receipt_id', value: id });
+        clearOutput();
+        showMessage('good', 'Receipt deleted.');
+        if (after) after();
+        await loadRecent();
+      } catch (e) { showMessage('bad', e.message); }
+      finally { setBusy(false); }
+    }
+  });
+}
+
+function showResult(rec, built) {
+  const box = $('result');
+  const head = el('div', { class: 'rhead' }, [
+    el('div', {}, [el('strong', { text: rec.shop }), el('div', { class: 'muted small', text: rec.date + (rec.time ? ' · ' + rec.time : '') + ' · ' + built.items + (built.items === 1 ? ' item' : ' items') })]),
+    el('div', { class: 'amount', text: money(built.printed === null ? built.sum : built.printed) })
+  ]);
+  let check;
+  if (built.printed === null) check = el('div', { class: 'note warn', text: 'Saved. The receipt total could not be read, so the lines were not checked against it.' });
+  else if (built.mismatch) check = el('div', { class: 'note warn', text: 'Saved and flagged: the lines add up to ' + money(built.sum) + ' but the receipt says ' + money(built.printed) + '. If a lot is missing, delete it and rescan with "Long receipt".' });
+  else check = el('div', { class: 'note good', text: 'Saved. The lines add up to the receipt total.' });
+  const lines = built.rows.map(r => ({ name: r.item, qty: r.qty, unit: r.unit, total: typeof r.total === 'number' ? r.total : null, packSize: r.pack_size || null, packUnit: r.pack_unit, flag: r.flag }));
+  box.replaceChildren(el('div', { class: 'card' }, [head, check, linesList(lines), deleteButton(built.receiptId)]));
+  box.hidden = false;
+}
+
+/* ---------- the one thing this app does ---------- */
+
+let productsCache = null;
+async function loadProducts() {
+  if (productsCache) return productsCache;
+  try {
+    const r = await api('read', { tab: 'Products' });
+    productsCache = K.productsMap(r.headers, r.rows);
+  } catch (e) { return new Map(); }
+  return productsCache;
+}
+
+async function scan(files) {
+  if (busy || !files.length) return;
+  clearOutput();
+  setBusy(true, 'Preparing the photo');
+  try {
+    let images = [];
+    for (const f of files.slice(0, 6)) images.push(await fileToJpeg(f));
+    const productsPromise = loadProducts();
+
+    setBusy(true, 'Reading the receipt');
+    const ai = await api('ai', { images, prompt: K.PROMPT, json: true });
+    images = null; // the photo is not kept anywhere
+
+    const now = new Date();
+    const stamp = K.localStamp(now);
+    const rec = K.normalizeReceipt(K.extractJson(ai.text), K.localDate(now));
+
+    setBusy(true, 'Finding pack sizes');
+    const products = await productsPromise;
+    const freshProducts = await K.resolvePacks(rec, products, offLookup, stamp);
+
+    setBusy(true, 'Saving');
+    const built = K.buildRows(rec, stamp);
+    const saved = await api('append', { tab: 'Receipts', rows: built.rows, ifAbsent: { column: 'receipt_id', value: built.receiptId } });
+    if (saved.skipped) {
+      showMessage('warn', 'This receipt is already in the sheet (same shop, date, time and total). Nothing was added.');
+    } else {
+      if (freshProducts.length) {
+        try {
+          await api('append', { tab: 'Products', rows: freshProducts });
+          freshProducts.forEach(p => products.set(p.code, { size: p.pack_size, unit: p.pack_unit }));
+        } catch (e) { /* the receipt is saved; the product list can catch up next time */ }
+      }
+      showResult(rec, built);
+    }
+    loadRecent();
+  } catch (e) {
+    showMessage('bad', e.message || 'Something went wrong.');
+  } finally {
+    setBusy(false);
+  }
+}
+
+/* ---------- last scanned receipts (sheet order, newest entry first) ---------- */
+
+async function loadRecent() {
+  if (!cfg.url || !cfg.token) return;
+  let groups;
+  try {
+    const r = await api('read', { tab: 'Receipts', tail: 600 });
+    groups = K.groupReceipts(r.headers, r.rows).slice(0, 12);
+  } catch (e) { return; }
+  $('recentTitle').hidden = groups.length === 0;
+  $('recent').replaceChildren(...groups.map(g => {
+    const title = el('div', {}, [el('strong', { text: g.shop })]);
+    if (g.flagged) title.appendChild(el('span', { class: 'tag', text: 'flagged' }));
+    title.appendChild(el('div', { class: 'muted small', text: g.date + (g.time ? ' · ' + g.time : '') + ' · ' + g.items + (g.items === 1 ? ' item' : ' items') }));
+    return el('details', { class: 'card' }, [
+      el('summary', {}, [el('div', { class: 'rhead' }, [title, el('div', { class: 'amount', text: money(g.total) })])]),
+      el('div', { class: 'inner' }, [linesList(g.lines), deleteButton(g.id)])
+    ]);
+  }));
+}
+
+/* ---------- long receipt (several photos) ---------- */
+
+let multiMode = false;
+let parts = [];
+function renderMulti() {
+  $('multi').hidden = !multiMode;
+  $('scan').hidden = multiMode;
+  $('multiCount').textContent = parts.length === 0 ? 'Long receipt' : 'Long receipt: ' + parts.length + (parts.length === 1 ? ' photo' : ' photos');
+  $('btnNextPart').textContent = parts.length === 0 ? 'Take the first part' : 'Take the next part';
+  $('btnNextPart').disabled = busy || parts.length >= 6;
+  $('btnMultiDone').disabled = busy || parts.length === 0;
+}
+
+$('btnScan').addEventListener('click', () => { multiMode = false; $('fileCam').click(); });
+$('btnPick').addEventListener('click', () => $('filePick').click());
+$('btnLong').addEventListener('click', () => { multiMode = true; parts = []; clearOutput(); renderMulti(); });
+$('btnNextPart').addEventListener('click', () => $('fileCam').click());
+$('btnMultiCancel').addEventListener('click', () => { multiMode = false; parts = []; renderMulti(); });
+$('btnMultiDone').addEventListener('click', async () => {
+  const files = parts; multiMode = false; parts = []; renderMulti();
+  await scan(files);
+});
+$('fileCam').addEventListener('change', async ev => {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  if (!files.length) return;
+  if (multiMode) { parts.push(files[0]); renderMulti(); }
+  else await scan(files);
+});
+$('filePick').addEventListener('change', async ev => {
+  const files = Array.from(ev.target.files || []);
+  ev.target.value = '';
+  if (files.length) await scan(files);
+});
+
+/* ---------- settings ---------- */
+
+function b64urlEncode(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
+function b64urlDecode(s) { return decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))); }
+
+function showSettings(open) {
+  $('settings').hidden = !open;
+  if (open) {
+    $('cfgUrl').value = cfg.url; $('cfgToken').value = cfg.token;
+    $('btnCopyLink').hidden = !(cfg.url && cfg.token);
+    $('lnkSheet').hidden = !cfg.sheetUrl;
+    if (cfg.sheetUrl) $('lnkSheet').href = cfg.sheetUrl;
+    $('cfgMsg').hidden = true;
+  }
+}
+function cfgNote(kind, textValue) { const n = $('cfgMsg'); n.className = 'note ' + kind; n.textContent = textValue; n.hidden = false; }
+
+async function saveSettings() {
+  cfg.url = $('cfgUrl').value.trim();
+  cfg.token = $('cfgToken').value.trim();
+  store.set('kitchen.url', cfg.url); store.set('kitchen.token', cfg.token);
+  $('btnSaveCfg').disabled = true;
+  cfgNote('good', 'Testing the connection');
+  try {
+    const p = await api('ping');
+    cfg.sheetUrl = p.sheetUrl || ''; store.set('kitchen.sheetUrl', cfg.sheetUrl);
+    productsCache = null;
+    const reader = { gemini: 'Gemini', anthropic: 'Claude' }[p.provider];
+    if (reader) cfgNote('good', 'Connected to "' + p.sheetName + '". Receipts will be read by ' + reader + '.');
+    else cfgNote('warn', 'Connected to "' + p.sheetName + '", but the backend has no AI key yet, so receipts cannot be read. Add one in Script Properties.');
+    $('btnCopyLink').hidden = false;
+    $('lnkSheet').hidden = !cfg.sheetUrl; if (cfg.sheetUrl) $('lnkSheet').href = cfg.sheetUrl;
+    loadRecent();
+  } catch (e) { cfgNote('bad', e.message); }
+  finally { $('btnSaveCfg').disabled = false; }
+}
+
+$('btnSettings').addEventListener('click', () => showSettings($('settings').hidden));
+$('btnCloseCfg').addEventListener('click', () => showSettings(false));
+$('btnSaveCfg').addEventListener('click', saveSettings);
+$('btnCopyLink').addEventListener('click', async () => {
+  const link = location.origin + location.pathname + '#c=' + b64urlEncode(JSON.stringify({ u: cfg.url, t: cfg.token }));
+  try { await navigator.clipboard.writeText(link); cfgNote('good', 'Link copied. Send it to yourself and open it on the other device. Treat it like a password.'); }
+  catch (e) { prompt('Copy this link and open it on the other device:', link); }
+});
+
+/* ---------- start ---------- */
+
+(function start() {
+  $('ver').textContent = 'Kitchen app v' + APP_VERSION;
+  const m = location.hash.match(/[#&]c=([A-Za-z0-9_-]+)/);
+  if (m) {
+    try {
+      const c = JSON.parse(b64urlDecode(m[1]));
+      if (c.u && c.t) {
+        cfg.url = String(c.u); cfg.token = String(c.t);
+        store.set('kitchen.url', cfg.url); store.set('kitchen.token', cfg.token);
+      }
+    } catch (e) { /* a broken link changes nothing */ }
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+  renderMulti();
+  if (!cfg.url || !cfg.token) showSettings(true);
+  else loadRecent();
+})();
+</script>
+</body>
+</html>
