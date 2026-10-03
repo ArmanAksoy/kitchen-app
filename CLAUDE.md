@@ -26,7 +26,7 @@ Build one stage at a time. Do not start a stage he has not asked for.
 - Write plain values to the sheet, never formulas. His Sheets locale is French and comma-separated formulas break with `#ERROR`. All calculation happens in code.
 - Always store the real unit of a quantity (`g`, `ml`, `unit`, ...). The old app hardcoded grams and left units blank, which corrupted the data.
 - A save is all or nothing: every row of a receipt goes in one write. The old app saved partially on errors.
-- No secret in this repo. It is public. Keys and the token live in Script Properties and in the phone's localStorage.
+- No secret in this repo. It is public. The AI key lives in Script Properties. The connection (web app URL + token) lives on the device, in two places: localStorage, and the page address after `#c=` (never sent to GitHub). The address copy exists because his browser did not keep localStorage between visits: a bookmark or home screen icon made after connecting stays connected. Each copy carries a save time and the newer one wins.
 - Few tabs, flat tables, obvious column names. If a feature needs a clever structure, simplify the feature.
 - No build step, no framework, no dependency in the shipped app. `index.html` must work when opened as a static file.
 - When you change a file, deliver the complete file. He does not apply partial patches.
@@ -139,15 +139,19 @@ Keep the `K` block of `index.html` pure (no DOM, no network): `tests/helpers.js`
 
 ## What has NOT been verified against the real services
 
-Version 1.0.0 was written in a sandbox with no API keys and no access to Google or Open Food Facts. All 55 tests pass, but they run against fakes. Until Arman has done the setup and scanned real receipts, treat these as unproven:
+Version 1.0.0 was written in a sandbox with no API keys and no access to Google or Open Food Facts. All 59 tests pass, but they run against fakes. Until Arman has done the setup and scanned real receipts, treat these as unproven:
 
-1. The Gemini and Claude request and response shapes in `Code.gs`, and the automatic model choice. (Known so far: Arman uses a Gemini key; the key, the endpoint and the `gemini-flash-latest` name were accepted, since Google answered 503 "high demand" and not an auth or not-found error. A successful answer has not been seen yet.)
+1. The Gemini and Claude request and response shapes in `Code.gs`, and the automatic model choice. (Known so far, 2026-10-03: Arman uses a Gemini key, and `setup` got a real text answer from `gemini-flash-latest`. An image request has not been seen yet. The Claude path is untested.)
 2. That the browser can call the Apps Script web app the way `api()` does (text/plain POST, redirect followed).
 3. That Open Food Facts allows the lookup from the browser (CORS). If it does not, pack sizes silently fall back to the receipt text; moving the lookup into the backend would be the fix.
 4. Reading quality on real Maxi receipts: whether the product number on each line is a barcode Open Food Facts knows, how discounts and "2 @ 1,29" lines are attributed, and whether one photo of a long receipt is sharp enough. The prompt (`K.PROMPT`) is the first thing to tune.
 5. Whether Sheets keeps the automatic number format on appended cells (the code reads the existing format and writes it back, changing only text columns to `@`).
 
 6. Speed. Apps Script gives an outside request about a minute. A slow model on a very long receipt could time out (the app then shows the error and saves nothing). If that happens, set `AI_MODEL` in Script Properties to a faster model.
+
+Seen in his old sheet: Maxi prints lines such as `06038303552 SN PATE TOMATE MRJ` and `(4)06038367407 SN LENTILLES MRJ`. The 11 digits are a barcode without its check digit (`K.upcCandidates` rebuilds it), `(4)` is the quantity, `MRJ` is a tax code.
+
+Setup problems he actually hit, already handled in the README: the web app was first deployed as "Execute as: user accessing the web app", which hides the "Anyone" choice and makes every call fail; and the old app (sheet `kitchen-tracker`, Drive folder `Kitchen inbox`) is still installed on his phone and easy to open by mistake.
 
 When the first real receipts are in, check them against the paper and fix what is off before building stage 2.
 

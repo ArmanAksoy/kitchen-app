@@ -123,7 +123,7 @@ async function test(name, fn) {
 
   await test('the photo is not kept: nothing image-like is in browser storage', async () => {
     const stored = await page.evaluate(() => Object.keys(localStorage).map(k => [k, localStorage.getItem(k).length]));
-    assert.deepStrictEqual(stored.map(s => s[0]).sort(), ['kitchen.sheetUrl', 'kitchen.token', 'kitchen.url']);
+    assert.deepStrictEqual(stored.map(s => s[0]).sort(), ['kitchen.probe', 'kitchen.savedAt', 'kitchen.sheetUrl', 'kitchen.token', 'kitchen.url']);
     assert.ok(stored.every(s => s[1] < 300));
   });
 
@@ -200,19 +200,60 @@ async function test(name, fn) {
     await page.waitForFunction(() => document.querySelectorAll('#recent details').length === 3);
   });
 
-  await test('the link for another device carries the connection, then disappears from the address bar', async () => {
+  const decodeHash = url => JSON.parse(Buffer.from(new URL(url).hash.replace('#c=', ''), 'base64url').toString());
+  const routeBackend = p => p.route(BACKEND_URL, async route => {
+    const out = backend.gs.doPost({ postData: { contents: route.request().postData() } });
+    await route.fulfill({ status: 200, contentType: 'application/json', body: out.text });
+  });
+
+  await test('once connected, the page address itself carries the connection', async () => {
+    const c = decodeHash(page.url());
+    assert.strictEqual(c.u, BACKEND_URL);
+    assert.strictEqual(c.t, token);
+    assert.ok(c.s > 0);
+  });
+
+  await test('a browser that forgets its storage stays connected when opened from the bookmark', async () => {
+    const bookmark = page.url();
+    await page.evaluate(() => localStorage.clear());
+    await page.goto('about:blank');
+    await page.goto(bookmark);
+    await page.waitForSelector('#recent details');
+    assert.ok(!(await page.isVisible('#settings')), 'no need to paste anything again');
+    assert.strictEqual(decodeHash(page.url()).t, token);
+  });
+
+  await test('a link opened on a brand new device connects it, and that device can be bookmarked too', async () => {
     const link = base + '#c=' + Buffer.from(JSON.stringify({ u: BACKEND_URL, t: token })).toString('base64url');
     const other = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
     const p2 = await other.newPage();
-    await p2.route(BACKEND_URL, async route => {
-      const out = backend.gs.doPost({ postData: { contents: route.request().postData() } });
-      await route.fulfill({ status: 200, contentType: 'application/json', body: out.text });
-    });
+    await routeBackend(p2);
     await p2.goto(link);
     await p2.waitForSelector('#recent details');
     assert.ok(!(await p2.isVisible('#settings')));
-    assert.strictEqual(new URL(p2.url()).hash, '');
+    assert.strictEqual(decodeHash(p2.url()).t, token, 'the address keeps the connection');
     if (SHOTS) await p2.screenshot({ path: path.join(SHOT_DIR, '7-dark.png'), fullPage: true });
+    await other.close();
+  });
+
+  await test('an old bookmark does not undo newer settings saved on the same device', async () => {
+    const stale = base + '#c=' + Buffer.from(JSON.stringify({ u: BACKEND_URL, t: 'old-token', s: 5 })).toString('base64url');
+    await page.goto('about:blank');
+    await page.goto(stale);
+    await page.waitForSelector('#recent details');
+    assert.strictEqual(decodeHash(page.url()).t, token, 'the newer saved token wins and replaces the stale one in the address');
+  });
+
+  await test('without any connection, a wrong deployment setting is named in the error', async () => {
+    const other = await browser.newContext({ viewport: { width: 390, height: 844 } });
+    const p3 = await other.newPage();
+    await p3.route(BACKEND_URL, r => r.abort('failed')); // what the browser does when Google answers with its sign-in page
+    await p3.goto(base);
+    await p3.fill('#cfgUrl', BACKEND_URL);
+    await p3.fill('#cfgToken', token);
+    await p3.click('#btnSaveCfg');
+    await p3.waitForSelector('#cfgMsg.bad');
+    assert.ok((await p3.textContent('#cfgMsg')).includes('Who has access: Anyone'));
     await other.close();
   });
 

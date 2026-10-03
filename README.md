@@ -44,7 +44,7 @@ Check the current price on the provider's own page. A receipt is one small reque
    - `Sheet:` the spreadsheet where receipts will go
    - `TOKEN:` a long password
    - `AI: working` (if it says NOT working, the key is wrong)
-6. Top right: **Deploy > New deployment**. Click the gear next to "Select type" > **Web app**. Execute as = **Me**. Who has access = **Anyone**. **Deploy**. Copy the **Web app URL** (it ends with `/exec`).
+6. Top right: **Deploy > New deployment**. Click the gear next to "Select type" > **Web app**. Set Execute as = **Me** first (in French: "Exécuter en tant que : Moi"), then Who has access = **Anyone** ("Tout le monde"; this choice only appears once "Me" is selected). **Deploy**. Copy the **Web app URL** (it ends with `/exec`).
 
 "Anyone" is required for the phone to reach it. The address is unguessable and every request must also carry the token, so nobody else can read or write.
 
@@ -52,7 +52,7 @@ Check the current price on the provider's own page. A receipt is one small reque
 1. On the computer, open https://armanaksoy.github.io/kitchen-app/
 2. Paste the Web app URL and the TOKEN, then **Save and test**. It should say "Connected".
 3. Click **Copy link for another device**, send that link to yourself, and open it on the phone. The phone is now connected too.
-4. On the phone, use the browser's **Add to Home Screen** so it opens like an app.
+4. On the phone, use the browser's **Add to Home Screen** right away, and always open the app from that icon. The icon remembers the connection, even if the browser forgets everything else.
 
 ## Using it
 - **Scan a receipt**: take the photo, wait a few seconds, done.
@@ -74,6 +74,8 @@ The `flag` column says what the app was unsure about: `unreadable`, `no_pack_siz
 ## If something is wrong
 | Message | What to do |
 |---|---|
+| The app asks for the URL and token again | Open it from the home screen icon or bookmark made after connecting (the connection is stored in that address). If there is none, paste once more, then add the page to the home screen. |
+| "Could not reach the backend" | In Apps Script: Deploy > Manage deployments > pencil. Set "Execute as" to **Me** first (the "Anyone" choice only appears after that), then "Who has access" to **Anyone**, Version: New version, Deploy. |
 | "Wrong token" | Paste the TOKEN again in Settings (the gear). It is in Script Properties. |
 | "The web app URL did not answer as expected" | The URL must end with `/exec`, and the deployment must be "Who has access: Anyone". |
 | "No AI key found" or an API error | Check the key in Script Properties, then run `setup` again to test it. |

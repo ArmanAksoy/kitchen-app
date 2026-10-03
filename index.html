@@ -152,7 +152,7 @@
 
 <script>
 'use strict';
-const APP_VERSION = '1.0.0';
+const APP_VERSION = '1.0.1';
 
 /* =====================================================================
    K: pure logic. No DOM, no network. Everything here is covered by
@@ -571,6 +571,9 @@ const store = {
   set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* private mode: settings last for this visit only */ } }
 };
 const cfg = { url: store.get('kitchen.url'), token: store.get('kitchen.token'), sheetUrl: store.get('kitchen.sheetUrl') };
+// Some browsers forget site data (private windows, "clear on exit", a home screen icon that
+// does not share storage with the browser). Find out now, so the app can say so.
+const storageWorks = (() => { store.set('kitchen.probe', '1'); return store.get('kitchen.probe') === '1'; })();
 
 /**
  * One POST per call to the Apps Script web app. The body is sent as text/plain on
@@ -587,7 +590,7 @@ async function api(action, payload) {
       body: JSON.stringify(Object.assign({ token: cfg.token, action }, payload || {}))
     });
   } catch (e) {
-    throw new Error('Could not reach the backend. Check the connection, or the web app URL in Settings.');
+    throw new Error('Could not reach the backend. Check the internet connection and the web app URL. If both are fine, the Apps Script deployment is probably not open: it must be "Execute as: Me" and "Who has access: Anyone".');
   }
   const body = await res.text();
   let data;
@@ -845,6 +848,26 @@ $('filePick').addEventListener('change', async ev => {
 function b64urlEncode(s) { return btoa(unescape(encodeURIComponent(s))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, ''); }
 function b64urlDecode(s) { return decodeURIComponent(escape(atob(s.replace(/-/g, '+').replace(/_/g, '/')))); }
 
+/**
+ * The connection (web app URL + token) is kept in two places: browser storage, and
+ * the page address itself, after the #. The address copy is what makes a bookmark
+ * or a home screen icon stay connected even when the browser forgets its storage.
+ * Nothing after the # is ever sent to GitHub. "s" is when it was saved: the newer
+ * of the two copies wins.
+ */
+function connectionLink() {
+  const saved = Number(store.get('kitchen.savedAt')) || 0;
+  return location.origin + location.pathname + location.search + '#c=' + b64urlEncode(JSON.stringify({ u: cfg.url, t: cfg.token, s: saved }));
+}
+function pinToAddress() {
+  if (cfg.url && cfg.token) history.replaceState(null, '', connectionLink());
+}
+function rememberConnection(url, token, savedAt) {
+  cfg.url = url; cfg.token = token;
+  store.set('kitchen.url', url); store.set('kitchen.token', token); store.set('kitchen.savedAt', String(savedAt));
+  pinToAddress();
+}
+
 function showSettings(open) {
   $('settings').hidden = !open;
   if (open) {
@@ -858,9 +881,7 @@ function showSettings(open) {
 function cfgNote(kind, textValue) { const n = $('cfgMsg'); n.className = 'note ' + kind; n.textContent = textValue; n.hidden = false; }
 
 async function saveSettings() {
-  cfg.url = $('cfgUrl').value.trim();
-  cfg.token = $('cfgToken').value.trim();
-  store.set('kitchen.url', cfg.url); store.set('kitchen.token', cfg.token);
+  rememberConnection($('cfgUrl').value.trim(), $('cfgToken').value.trim(), Date.now());
   $('btnSaveCfg').disabled = true;
   cfgNote('good', 'Testing the connection');
   try {
@@ -868,7 +889,10 @@ async function saveSettings() {
     cfg.sheetUrl = p.sheetUrl || ''; store.set('kitchen.sheetUrl', cfg.sheetUrl);
     productsCache = null;
     const reader = { gemini: 'Gemini', anthropic: 'Claude' }[p.provider];
-    if (reader) cfgNote('good', 'Connected to "' + p.sheetName + '". Receipts will be read by ' + reader + '.');
+    const keep = storageWorks
+      ? ' To stay connected on this device, add this page to your home screen (or bookmark it) now.'
+      : ' This browser does not keep data between visits, so add this page to your home screen (or bookmark it) now and always open the app from there.';
+    if (reader) cfgNote('good', 'Connected to "' + p.sheetName + '". Receipts will be read by ' + reader + '.' + keep);
     else cfgNote('warn', 'Connected to "' + p.sheetName + '", but the backend has no AI key yet, so receipts cannot be read. Add one in Script Properties.');
     $('btnCopyLink').hidden = false;
     $('lnkSheet').hidden = !cfg.sheetUrl; if (cfg.sheetUrl) $('lnkSheet').href = cfg.sheetUrl;
@@ -881,7 +905,7 @@ $('btnSettings').addEventListener('click', () => showSettings($('settings').hidd
 $('btnCloseCfg').addEventListener('click', () => showSettings(false));
 $('btnSaveCfg').addEventListener('click', saveSettings);
 $('btnCopyLink').addEventListener('click', async () => {
-  const link = location.origin + location.pathname + '#c=' + b64urlEncode(JSON.stringify({ u: cfg.url, t: cfg.token }));
+  const link = connectionLink();
   try { await navigator.clipboard.writeText(link); cfgNote('good', 'Link copied. Send it to yourself and open it on the other device. Treat it like a password.'); }
   catch (e) { prompt('Copy this link and open it on the other device:', link); }
 });
@@ -894,13 +918,13 @@ $('btnCopyLink').addEventListener('click', async () => {
   if (m) {
     try {
       const c = JSON.parse(b64urlDecode(m[1]));
-      if (c.u && c.t) {
-        cfg.url = String(c.u); cfg.token = String(c.t);
-        store.set('kitchen.url', cfg.url); store.set('kitchen.token', cfg.token);
-      }
+      const theirs = Number(c.s) || 0;
+      const mine = Number(store.get('kitchen.savedAt')) || 0;
+      const haveOne = !!(cfg.url && cfg.token);
+      if (c.u && c.t && (!haveOne || theirs >= mine)) rememberConnection(String(c.u), String(c.t), theirs);
     } catch (e) { /* a broken link changes nothing */ }
-    history.replaceState(null, '', location.pathname + location.search);
   }
+  pinToAddress(); // the address always carries the connection in use, so a bookmark made at any time works
   renderMulti();
   if (!cfg.url || !cfg.token) showSettings(true);
   else loadRecent();
