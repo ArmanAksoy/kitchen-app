@@ -122,7 +122,9 @@ One endpoint, `POST` to the web app URL, body is JSON sent as `text/plain` (this
 | `append` | `tab`, `rows: [{column: value}]`, `ifAbsent: {column, value}` (optional) | `appended`, and `skipped: true` if `ifAbsent` matched |
 | `remove` | `tab`, `column`, `value` | `removed` |
 
-AI provider: whichever key exists in Script Properties (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`; `AI_PROVIDER` decides if both). No model id is hard-coded, because ids get retired: Gemini uses the `gemini-flash-latest` alias and, on a 404, lists the models and takes the newest plain Flash; Claude lists the models and takes the newest Sonnet. `AI_MODEL` forces an exact id.
+AI provider: whichever key exists in Script Properties (`GEMINI_API_KEY` or `ANTHROPIC_API_KEY`; `AI_PROVIDER` decides if both). No model id is hard-coded, because ids get retired: Gemini uses the `gemini-flash-latest` alias; Claude lists the models and takes the newest Sonnet. `AI_MODEL` forces an exact id.
+
+Busy answers (429, 500, 502, 503, 504, 529) are retried after 1.5 s and 4 s. If Gemini is still busy, or the model name is gone (404), the backend lists the plain Flash models and tries the two newest others, then remembers the one that answered (10 minutes if busy, 6 hours if gone). A forced `AI_MODEL` is retried but never swapped. This was added in 1.0.1 after the very first real call (setup, 2026-10-03) came back "503 high demand" on `gemini-flash-latest`.
 
 After changing `Code.gs`: bump `VERSION`, tell Arman to paste it and do Deploy > Manage deployments > pencil > New version. Say this explicitly in your summary to him, every time.
 
@@ -137,9 +139,9 @@ Keep the `K` block of `index.html` pure (no DOM, no network): `tests/helpers.js`
 
 ## What has NOT been verified against the real services
 
-Version 1.0.0 was written in a sandbox with no API keys and no access to Google or Open Food Facts. All 50 tests pass, but they run against fakes. Until Arman has done the setup and scanned real receipts, treat these as unproven:
+Version 1.0.0 was written in a sandbox with no API keys and no access to Google or Open Food Facts. All 55 tests pass, but they run against fakes. Until Arman has done the setup and scanned real receipts, treat these as unproven:
 
-1. The Gemini and Claude request and response shapes in `Code.gs`, and the automatic model choice.
+1. The Gemini and Claude request and response shapes in `Code.gs`, and the automatic model choice. (Known so far: Arman uses a Gemini key; the key, the endpoint and the `gemini-flash-latest` name were accepted, since Google answered 503 "high demand" and not an auth or not-found error. A successful answer has not been seen yet.)
 2. That the browser can call the Apps Script web app the way `api()` does (text/plain POST, redirect followed).
 3. That Open Food Facts allows the lookup from the browser (CORS). If it does not, pack sizes silently fall back to the receipt text; moving the lookup into the backend would be the fix.
 4. Reading quality on real Maxi receipts: whether the product number on each line is a barcode Open Food Facts knows, how discounts and "2 @ 1,29" lines are attributed, and whether one photo of a long receipt is sharp enough. The prompt (`K.PROMPT`) is the first thing to tune.

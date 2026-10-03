@@ -160,6 +160,7 @@ test('ai (Gemini): when the default model name is retired, it finds the newest F
       { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-3.9-flash-lite', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-4.1-flash-preview', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-4.0-flash-image', supportedGenerationMethods: ['generateContent'] },
       { name: 'models/gemini-9-flash', supportedGenerationMethods: ['embedContent'] }
     ] } };
@@ -169,6 +170,69 @@ test('ai (Gemini): when the default model name is retired, it finds the newest F
   const r = b.call({ token: b.token, action: 'ai', prompt: 'p' });
   assert.strictEqual(r.model, 'gemini-3.8-flash');
   assert.strictEqual(r.text, 'fine');
+});
+
+const busy = { code: 503, body: { error: { message: 'This model is currently experiencing high demand.' } } };
+const flashList = { code: 200, body: { models: [
+  { name: 'models/gemini-3.5-flash', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.8-flash', supportedGenerationMethods: ['generateContent'] },
+  { name: 'models/gemini-3.8-flash-lite', supportedGenerationMethods: ['generateContent'] }
+] } };
+const generateCalls = b => b.requests.filter(r => r.url.includes(':generateContent')).map(r => r.url.match(/models\/(.+):generateContent/)[1]);
+
+test('ai (Gemini): a short overload is retried and the scan goes through', () => {
+  let n = 0;
+  const b = fresh({ fetch: () => geminiOk('OK') });
+  b.requests.length = 0; b.sleeps.length = 0;
+  b.gs.UrlFetchApp.fetch = (url, params) => {
+    b.requests.push({ url, params });
+    const r = (++n <= 2) ? busy : geminiOk('done');
+    return { getResponseCode: () => r.code, getContentText: () => JSON.stringify(r.body) };
+  };
+  const r = b.call({ token: b.token, action: 'ai', prompt: 'p' });
+  assert.strictEqual(r.text, 'done');
+  assert.strictEqual(r.model, 'gemini-flash-latest');
+  assert.deepStrictEqual(b.sleeps, [1500, 4000]);
+  assert.deepStrictEqual(generateCalls(b), ['gemini-flash-latest', 'gemini-flash-latest', 'gemini-flash-latest']);
+});
+
+test('ai (Gemini): a lasting overload falls back to another Flash model, and remembers it for a while', () => {
+  const b = fresh({ fetch: url => {
+    if (url.includes('models?pageSize')) return flashList;
+    if (url.includes('gemini-3.5-flash:')) return geminiOk('from the older model');
+    return busy; // the alias and 3.8 are both overloaded
+  } });
+  // setup() already went through the fallback once: start counting from here
+  b.requests.length = 0;
+  const r = b.call({ token: b.token, action: 'ai', prompt: 'p' });
+  assert.strictEqual(r.model, 'gemini-3.5-flash');
+  assert.strictEqual(r.text, 'from the older model');
+  assert.deepStrictEqual(generateCalls(b), ['gemini-3.5-flash'], 'the model that worked is used directly on the next call');
+  assert.ok(b.logs.join('\n').includes('AI:     working (gemini, model gemini-3.5-flash'));
+});
+
+test('ai (Gemini): when everything is overloaded the app gets the real reason, and setup explains it', () => {
+  const b = fresh({ fetch: url => (url.includes('models?pageSize') ? flashList : busy) });
+  const r = b.call({ token: b.token, action: 'ai', prompt: 'p' });
+  assert.strictEqual(r.error, 'Gemini API error 503: This model is currently experiencing high demand.');
+  const log = b.logs.join('\n');
+  assert.ok(log.includes('NOT working -> Gemini API error 503'));
+  assert.ok(log.includes('The key was accepted'));
+});
+
+test('ai (Gemini): a forced AI_MODEL is retried but never swapped for another model', () => {
+  const b = fresh({ props: { GEMINI_API_KEY: 'g', AI_MODEL: 'my-model' }, fetch: url => (url.includes('models?pageSize') ? flashList : busy) });
+  b.requests.length = 0;
+  assert.strictEqual(b.call({ token: b.token, action: 'ai', prompt: 'p' }).ok, false);
+  assert.deepStrictEqual(generateCalls(b), ['my-model', 'my-model', 'my-model']);
+});
+
+test('ai (Claude): an overloaded answer (529) is retried', () => {
+  let n = 0;
+  const b = fresh({ props: { ANTHROPIC_API_KEY: 'a', AI_MODEL: 'claude-x' }, fetch: () => (
+    ++n === 2 ? { code: 529, body: { error: { message: 'Overloaded' } } } : { code: 200, body: { content: [{ type: 'text', text: 'ok' }] } }
+  ) });
+  assert.strictEqual(b.call({ token: b.token, action: 'ai', prompt: 'p' }).text, 'ok');
 });
 
 test('ai (Claude): picks the newest Sonnet from the models list and reads text blocks only', () => {

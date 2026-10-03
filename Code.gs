@@ -27,7 +27,7 @@
  *   - One request writes all of its rows in a single setValues call: no partial saves.
  */
 
-var VERSION = '1.0.0';
+var VERSION = '1.0.1';
 var MAX_ROWS_PER_CALL = 500;
 
 /* ------------------------------------------------------------------ web app */
@@ -92,7 +92,11 @@ function setup() {
     var r = ai_({ images: [], prompt: 'Reply with the single word OK.' });
     lines.push('AI:     working (' + r.provider + ', model ' + r.model + ', answered "' + r.text.trim().slice(0, 20) + '")');
   } catch (err) {
-    lines.push('AI:     NOT working -> ' + ((err && err.message) || err));
+    var why = String((err && err.message) || err);
+    lines.push('AI:     NOT working -> ' + why);
+    if (/error (429|500|502|503|504|529)/.test(why)) {
+      lines.push('        (The key was accepted. The AI service itself was busy: run setup again in a minute.)');
+    }
   }
   lines.push('');
   lines.push('Next: Deploy > New deployment > Web app (Execute as: Me, Who has access: Anyone),');
@@ -340,6 +344,23 @@ function providerName_() {
   return '';
 }
 
+/**
+ * AI services are sometimes overloaded for a few seconds. These answers mean
+ * "try again", not "you did something wrong".
+ */
+function isBusy_(code) { return [429, 500, 502, 503, 504, 529].indexOf(code) >= 0; }
+
+/** Runs the request, and again after 1.5 s and 4 s if the service says it is busy. */
+function busyRetry_(request) {
+  var waits = [1500, 4000];
+  var res = request();
+  for (var i = 0; i < waits.length && isBusy_(res.getResponseCode()); i++) {
+    Utilities.sleep(waits[i]);
+    res = request();
+  }
+  return res;
+}
+
 /* Anthropic (Claude) */
 
 function anthropicHeaders_() {
@@ -353,12 +374,14 @@ function anthropic_(images, prompt) {
   });
   content.push({ type: 'text', text: prompt });
 
-  var res = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
-    method: 'post',
-    contentType: 'application/json',
-    muteHttpExceptions: true,
-    headers: anthropicHeaders_(),
-    payload: JSON.stringify({ model: model, max_tokens: 16000, messages: [{ role: 'user', content: content }] })
+  var res = busyRetry_(function () {
+    return UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'post',
+      contentType: 'application/json',
+      muteHttpExceptions: true,
+      headers: anthropicHeaders_(),
+      payload: JSON.stringify({ model: model, max_tokens: 16000, messages: [{ role: 'user', content: content }] })
+    });
   });
   var body = parseJson_(res.getContentText());
   if (res.getResponseCode() !== 200) {
@@ -405,8 +428,9 @@ var GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta/';
 function geminiHeaders_() { return { 'x-goog-api-key': props_().getProperty('GEMINI_API_KEY') }; }
 
 function gemini_(images, prompt, wantJson) {
+  var cache = CacheService.getScriptCache();
   var forced = props_().getProperty('AI_MODEL');
-  var model = forced || CacheService.getScriptCache().get('gemini_model') || 'gemini-flash-latest';
+  var model = forced || cache.get('gemini_model') || 'gemini-flash-latest';
 
   var parts = images.map(function (im) {
     return { inline_data: { mime_type: im.mimeType || 'image/jpeg', data: im.data } };
@@ -415,12 +439,24 @@ function gemini_(images, prompt, wantJson) {
   var payload = { contents: [{ role: 'user', parts: parts }] };
   if (wantJson) payload.generationConfig = { responseMimeType: 'application/json' };
 
-  var res = geminiCall_(model, payload);
-  if (res.getResponseCode() === 404 && !forced) {
-    // The "latest" alias is gone or renamed: find the newest plain Flash model and remember it.
-    model = geminiNewestFlash_();
-    CacheService.getScriptCache().put('gemini_model', model, 21600);
-    res = geminiCall_(model, payload);
+  var res = busyRetry_(function () { return geminiCall_(model, payload); });
+  var code = res.getResponseCode();
+  if (!forced && (code === 404 || isBusy_(code))) {
+    // 404: that model name was retired. Busy: that model is overloaded right now.
+    // Either way, try the other plain Flash models, newest first, and remember the
+    // one that answers (6 hours if the name is gone, 10 minutes if it was only busy).
+    var others = [];
+    try { others = geminiFlashModels_().filter(function (m) { return m !== model; }).slice(0, 2); }
+    catch (err) { /* keep the first answer as the error to report */ }
+    for (var i = 0; i < others.length; i++) {
+      var attempt = geminiCall_(others[i], payload);
+      if (attempt.getResponseCode() === 200) {
+        model = others[i];
+        res = attempt;
+        cache.put('gemini_model', model, code === 404 ? 21600 : 600);
+        break;
+      }
+    }
   }
   var body = parseJson_(res.getContentText());
   if (res.getResponseCode() !== 200) {
@@ -445,7 +481,8 @@ function geminiCall_(model, payload) {
   });
 }
 
-function geminiNewestFlash_() {
+/** Plain Flash models (no -lite, -image, -preview suffix) that can read images, newest version first. */
+function geminiFlashModels_() {
   var res = UrlFetchApp.fetch(GEMINI_BASE + 'models?pageSize=1000', {
     muteHttpExceptions: true, headers: geminiHeaders_()
   });
@@ -453,16 +490,15 @@ function geminiNewestFlash_() {
   if (res.getResponseCode() !== 200) {
     throw new Error('Gemini API error ' + res.getResponseCode() + ' while listing models: ' + apiMessage_(body));
   }
-  var best = null;
+  var found = [];
   (body.models || []).forEach(function (m) {
     var match = String(m.name).match(/^models\/(gemini-(\d+(?:\.\d+)?)-flash)$/);
     if (!match) return;
     if ((m.supportedGenerationMethods || []).indexOf('generateContent') < 0) return;
-    var version = parseFloat(match[2]);
-    if (!best || version > best.version) best = { id: match[1], version: version };
+    found.push({ id: match[1], version: parseFloat(match[2]) });
   });
-  if (!best) throw new Error('No Gemini Flash model found. Set AI_MODEL in Script Properties.');
-  return best.id;
+  found.sort(function (x, y) { return y.version - x.version; });
+  return found.map(function (f) { return f.id; });
 }
 
 /* shared */

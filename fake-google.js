@@ -113,6 +113,7 @@ function loadBackend(options) {
   const books = {};
   const requests = [];
   const logs = [];
+  const sleeps = [];
 
   const sandbox = {
     console: { log: m => logs.push(String(m)) },
@@ -124,6 +125,7 @@ function loadBackend(options) {
     LockService: { getScriptLock: () => ({ waitLock() {}, releaseLock() {} }) },
     Utilities: {
       getUuid: () => crypto.randomUUID(),
+      sleep: ms => { sleeps.push(ms); },
       formatDate: d => d.toISOString().slice(0, 19)
     },
     ContentService: {
@@ -148,7 +150,7 @@ function loadBackend(options) {
   /** Sends one request the way the app does and returns the parsed answer. */
   const call = body => JSON.parse(sandbox.doPost({ postData: { contents: JSON.stringify(body) } }).text);
 
-  return { gs: sandbox, props, books, requests, logs, call, FakeBook };
+  return { gs: sandbox, props, books, requests, logs, sleeps, call, FakeBook };
 }
 
 module.exports = { loadBackend, FakeSheet, FakeBook };
