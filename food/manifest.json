@@ -1,2 +1,17 @@
-{"name":"Food log","short_name":"Food log","start_url":"./","scope":"./","display":"standalone","background_color":"#14181d","theme_color":"#14181d",
- "icons":[{"src":"icon-192.png","sizes":"192x192","type":"image/png"},{"src":"icon-512.png","sizes":"512x512","type":"image/png","purpose":"any maskable"}]}
+{
+  "id": "/kitchen-app/food/",
+  "name": "Food log",
+  "short_name": "Food log",
+  "description": "What I eat, with macros and micronutrients. Everything stays on this phone.",
+  "start_url": "/kitchen-app/food/",
+  "scope": "/kitchen-app/food/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14181d",
+  "theme_color": "#14181d",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
