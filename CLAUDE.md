@@ -2,6 +2,10 @@
 
 Read this whole file before changing anything. It holds the owner's decisions, the reasons behind the design, and what has and has not been verified.
 
+## Direction change, November 2026
+
+Arman set the receipts, food cost and budget roadmap below aside for now. What he uses and wants worked on is the **food log in `food/`**: a standalone, offline app that records what he eats with macros and micronutrients, with no external AI and no backend. It shares nothing with the receipts app. Read `food/README.md` before touching it. Everything below this section describes the receipts app at the repo root, which stays as it is until he asks for it again.
+
 ## Who this is for
 
 One user, Arman, on his phone, in Montreal. He shops mostly at Maxi (Côte-des-Neiges). Receipts are in French, prices in CAD. He batch-cooks (4 to 20 portions) and wants to know what his food costs.

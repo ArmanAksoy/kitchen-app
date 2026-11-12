@@ -1,5 +1,9 @@
 # Kitchen app
 
+**Food log (the app in use since November 2026):** https://armanaksoy.github.io/kitchen-app/food/ records what you eat with calories, macros, vitamins and minerals, entirely on the phone. How to use it: [`food/README.md`](food/README.md).
+
+The rest of this page is about the older receipts app at the root of this repo, on hold for now.
+
 A personal phone app. Version 1 does one thing: you photograph a store receipt, and every line of it lands in a Google Sheet (item, price, quantity, pack size, shop, place, date, time). There is no review screen and the photo is not kept.
 
 Later stages (not built yet): calories and a food log, food cost and price per portion, then a budget. See `CLAUDE.md`.

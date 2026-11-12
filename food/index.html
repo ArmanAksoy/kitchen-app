@@ -125,6 +125,7 @@ function rebuildIndex() {
   for (const f of S.foods) idx.push(F.indexItem({ ref: { t: 'u', id: f.id }, name: f.name, alt: '' }));
   S.index = idx.concat(S.cnfIndex);
 }
+const one = v => (v === null || v === undefined) ? '?' : Math.round(v * 10) / 10;
 const refKey = ref => ref.t + ':' + ref.id;
 /* ref -> { name, unit, per100, measures:[[label, amountInUnit]], source } or null when it no longer exists */
 function resolve(ref) {
@@ -266,7 +267,7 @@ function amountSheet(ref, food, parsed, entry) {
     const i = Number($('#unit').value), q = parseFloat($('#amt').value) || 0, amount = i >= 0 ? q * ms[i][1] : q;
     const n = F.scale(food.per100, amount);
     $('#per').textContent = F.round(amount, 'g') + ' ' + food.unit + ' · ' + food.source;
-    $('#preview').innerHTML = '<div class="row"><div class="grow big num">' + Math.round(n.kcal || 0) + ' <span class="dim" style="font-size:15px;font-weight:400">kcal</span></div><div class="small dim right">P ' + F.round(n.protein, 'g') + ' g<br>C ' + F.round(n.carbs, 'g') + ' g · F ' + F.round(n.fat, 'g') + ' g</div></div>';
+    $('#preview').innerHTML = '<div class="row"><div class="grow big num">' + Math.round(n.kcal || 0) + ' <span class="dim" style="font-size:15px;font-weight:400">kcal</span></div><div class="small dim right">P ' + one(n.protein) + ' g<br>C ' + one(n.carbs) + ' g · F ' + one(n.fat) + ' g</div></div>';
     $('#warn').innerHTML = n.kcal > 2500 ? '<div class="note">That is ' + Math.round(n.kcal) + ' kcal in one entry. Check the amount and the unit.</div>' : '';
     return { amount, qty: q, measure: i >= 0 ? ms[i][0] : null };
   };
