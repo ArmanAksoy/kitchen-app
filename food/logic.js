@@ -209,7 +209,9 @@ const F = (() => {
   function readLabelText(text) {
     let t = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     t = t.replace(/\bo\s?(m?g)\b/g, '0 $1').replace(/(\d)\s?[,]\s?(\d)/g, '$1.$2').replace(/[|]/g, ' ');
-    const res = { serving: null, unit: 'g', servingLabel: '', vals: {} };
+    const res = { serving: null, unit: 'g', servingLabel: '', vals: {}, name: '' };
+    const nm = String(text || '').match(/^\s*(?:name|nom)\s*:\s*(.+)$/im);      /* pasted blocks start with "Name: ..." */
+    if (nm) { res.name = nm[1].trim(); t = t.replace(/^\s*(?:name|nom)\s*:.*$/m, ''); }
 
     let m = t.match(/(?:per|pour|par)\s+([^\n(]{0,40}?)\(\s*(\d+(?:\.\d+)?)\s*(g|ml)\s*\)/);
     if (m) { res.servingLabel = m[1].trim(); res.serving = num(m[2]); res.unit = m[3]; }
@@ -252,8 +254,9 @@ const F = (() => {
      size is known), found, warnings }. Never throws: unread fields are simply absent. */
   function parseLabel(text) {
     const reads = (Array.isArray(text) ? text : [text]).map(readLabelText);
-    const res = { serving: null, unit: 'g', servingLabel: '', vals: {}, per100: null, found: 0, warnings: [] };
+    const res = { serving: null, unit: 'g', servingLabel: '', vals: {}, per100: null, found: 0, warnings: [], name: '' };
     for (const r of reads) {
+      if (!res.name && r.name) res.name = r.name;
       if (!res.serving && r.serving) { res.serving = r.serving; res.unit = r.unit; res.servingLabel = r.servingLabel; }
       else if (res.serving && r.serving && r.serving !== res.serving && !res.warnings.includes('servingsize')) res.warnings.push('servingsize');
       for (const k of Object.keys(r.vals)) {

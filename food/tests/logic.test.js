@@ -99,6 +99,14 @@ t('real can photo: two readings are merged, supplemented vitamins and caffeine a
   const clash = F.parseLabel(['Calories 110\nSodium 105 mg', 'Calories 110\nSodium 185 mg']);
   assert.strictEqual(clash.vals.sodium, 105); assert.ok(clash.warnings.includes('sodium'));
 });
+t('pasted block with a name, and a table copied from a web page', () => {
+  const r = F.parseLabel('Name: Croissant aux amandes Première Moisson\nPer 1 croissant (175 g)\nCalories 760\nFat 49 g\nSaturated 19 g\nTrans 1.5 g\nCarbohydrate 68 g\nFibre 5 g\nSugars 37 g\nProtein 17 g\nCholesterol 160 mg\nSodium 310 mg');
+  assert.strictEqual(r.name, 'Croissant aux amandes Première Moisson'); assert.strictEqual(r.serving, 175); assert.strictEqual(r.servingLabel, '1 croissant');
+  assert.deepStrictEqual(r.vals, { kcal: 760, fat: 49, satfat: 19, transfat: 1.5, carbs: 68, fibre: 5, sugars: 37, protein: 17, chol: 160, sodium: 310 });
+  assert.deepStrictEqual(r.warnings, []);
+  const web = F.parseLabel('Serving size 1 croissant (175 g)\nCalories\t760\nFat\t49 g\t75 %\nCarbohydrate\t68 g\nProtein\t17 g\nSodium\t310 mg\t13 %\nCalcium\t0 mg\t10 %');
+  assert.strictEqual(web.vals.kcal, 760); assert.strictEqual(web.vals.fat, 49); assert.strictEqual(web.vals.sodium, 310); assert.strictEqual(web.serving, 175);
+});
 t('spreadsheet file', () => {
   const log = [{ date: '2026-11-11', time: '08:10', name: 'Banana, raw', amount: 130, unit: 'g', source: 'cnf', nut: F.scale(per100(1704), 130) },
                { date: '2026-11-11', time: '12:00', name: 'Biscuits "é" <x>', amount: 30, unit: 'g', source: 'label', nut: F.scale({ kcal: 467 }, 30) }];

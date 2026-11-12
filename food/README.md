@@ -73,6 +73,21 @@ A ref is `{t, id}`: `c` = database food code, `u` = packaged food, `r` = recipe.
 - **Never redraw a screen while he types.** It takes the keyboard away. Update only the summary.
 - **The label photo is never stored.**
 
+### Getting a food in without typing (since 1.0.3)
+For foods with published numbers (a bakery, a restaurant), he does not want to type thirteen boxes. Two ways, both feeding the same `F.parseLabel` used for photos:
+- **A link** prepared in a chat: `https://armanaksoy.github.io/kitchen-app/food/#food=` followed by the URL-encoded text block. It opens the form already filled; nothing is saved until he taps Save. `#recipe=` does the same with a recipe block. The part after `#` is never sent to a server.
+- **Paste**: the food form has an "Or paste text" box that takes the same block, or a nutrition table copied from a web page.
+
+The text block is plain lines, per serving, as on a label:
+
+    Name: Croissant aux amandes Première Moisson
+    Per 1 croissant (175 g)
+    Calories 760
+    Fat 49 g
+    Sodium 310 mg
+
+When he mentions something he ate that is not in the database, look up the maker's published values and answer with a ready link.
+
 ### Recipe block for pasting
 The recipe screen accepts a block prepared in a chat (all or nothing):
 

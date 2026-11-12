@@ -70,6 +70,19 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
     assert.strictEqual(await page.locator('[data-entry]').count(), 4); await shot('1-today');
     await page.evaluate(() => window.scrollTo(0, 900)); await shot('5-nutrients'); await page.evaluate(() => window.scrollTo(0, 0));
   });
+  await step('a link opens the food form already filled, and a recipe link the recipe screen', async () => {
+    const block = 'Name: Croissant test\nPer 1 croissant (175 g)\nCalories 760\nFat 49 g\nCarbohydrate 68 g\nProtein 17 g\nSodium 310 mg';
+    await page.goto(url + '#food=' + encodeURIComponent(block)); await page.waitForSelector('#fname');
+    assert.strictEqual(await page.inputValue('#fname'), 'Croissant test'); assert.strictEqual(await page.inputValue('#serv'), '175');
+    assert.strictEqual(await page.inputValue('#v_kcal'), '760'); assert.strictEqual(await page.inputValue('#slabel'), '1 croissant');
+    assert.ok(!page.url().includes('#'));
+    await page.fill('#ptext', 'Calories 500').catch(() => {}); await page.click('#fsave'); await page.waitForSelector('#over.on', { state: 'detached' });
+    assert.match(await page.textContent('#main'), /Croissant test/);
+    const rec = '{"name":"Linked recipe","batch_g":1000,"portion_g":250,"items":[{"code":125,"g":500},{"name":"croissant test","g":350}]}';
+    await page.goto(url + '#recipe=' + encodeURIComponent(rec)); await page.waitForSelector('#rname');
+    assert.strictEqual(await page.inputValue('#rname'), 'Linked recipe'); assert.strictEqual(await page.inputValue('[data-amt="1"]'), '350');
+    await page.click('#back'); await page.click('nav [data-view=today]');
+  });
   let backup;
   await step('spreadsheet and backup files download; data survives a reload', async () => {
     await page.click('nav [data-view=more]'); await shot('6-more');
