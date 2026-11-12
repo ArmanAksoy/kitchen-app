@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#14181d">
+<title>Food log</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<style>
+:root{--bg:#14181d;--card:#1d232b;--line:#2c3540;--text:#e9edf1;--dim:#93a0ad;--acc:#58c38a;--warn:#e6b450;--bad:#e5645f;--blue:#6aa9f0}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+body{padding:0 0 calc(132px + env(safe-area-inset-bottom))}
+button,input,select,textarea{font:inherit;color:inherit}
+button{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;cursor:pointer}
+button.primary{background:var(--acc);border-color:var(--acc);color:#0c1a12;font-weight:650}
+button.danger{color:var(--bad)}
+button.link{background:none;border:0;color:var(--blue);padding:8px}
+input,select,textarea{background:#11151a;border:1px solid var(--line);border-radius:10px;padding:11px 12px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--acc);outline-offset:-1px}
+h1{font-size:19px;margin:0}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);margin:20px 4px 8px;font-weight:600}
+.wrap{max-width:560px;margin:0 auto;padding:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:12px}
+.row{display:flex;align-items:center;gap:10px}
+.grow{flex:1;min-width:0}
+.dim{color:var(--dim)} .small{font-size:13px} .right{text-align:right} .num{font-variant-numeric:tabular-nums}
+.ell{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top{display:flex;align-items:center;justify-content:space-between;padding:6px 0 12px}
+.top button{padding:8px 14px;font-size:20px;line-height:1}
+.big{font-size:34px;font-weight:700;letter-spacing:-.02em}
+.bar{height:8px;background:#11151a;border-radius:6px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--acc);border-radius:6px}
+.bar i.toomuch{background:var(--bad)} .bar i.blue{background:var(--blue)} .bar i.warn{background:var(--warn)}
+.macros{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.list{list-style:none;margin:0;padding:0}
+.list li{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer}
+.list li:last-child{border-bottom:0}
+.list .plus{flex:none;width:40px;height:40px;padding:0;border-radius:50%;font-size:22px;color:var(--acc)}
+.tag{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--dim);margin-left:6px;white-space:nowrap}
+.nut{display:grid;grid-template-columns:1fr auto 44px;gap:2px 10px;align-items:center;padding:7px 0}
+.nut .bar{grid-column:1/-1;height:5px;margin-top:2px}
+nav{position:fixed;left:0;right:0;bottom:0;background:#10141a;border-top:1px solid var(--line);display:flex;padding-bottom:env(safe-area-inset-bottom);z-index:5}
+nav button{flex:1;border:0;background:none;border-radius:0;padding:14px 4px;color:var(--dim)}
+nav button.on{color:var(--acc);font-weight:650}
+#fab{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom));z-index:6;padding:14px 28px;border-radius:28px;box-shadow:0 6px 20px #0008}
+.over{position:fixed;inset:0;background:var(--bg);z-index:20;overflow:auto;display:none}
+.over.on{display:block}
+.sheetbg{position:fixed;inset:0;background:#000a;z-index:30;display:none;align-items:flex-end}
+.sheetbg.on{display:flex}
+.sheet{background:var(--card);border-radius:20px 20px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));width:100%;max-width:560px;margin:0 auto;max-height:92vh;overflow:auto}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
+.flag input{border-color:var(--warn)}
+.note{background:#2a2416;border:1px solid #57481f;color:#f0d9a0;border-radius:12px;padding:10px 12px;font-size:14px;margin:10px 0}
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom));background:#e9edf1;color:#14181d;padding:10px 16px;border-radius:20px;z-index:50;display:none;max-width:90vw;font-size:14px}
+.seg{display:flex;background:#11151a;border-radius:12px;padding:3px;margin-bottom:12px}
+.seg button{flex:1;border:0;background:none;padding:9px;border-radius:10px;color:var(--dim)}
+.seg button.on{background:var(--card);color:var(--text)}
+.ing{display:grid;grid-template-columns:1fr 92px 36px;gap:8px;align-items:center;padding:6px 0}
+.ing button{padding:6px 0}
+</style>
+</head>
+<body>
+<div class="wrap" id="main"></div>
+<button id="fab" class="primary">+ Add food</button>
+<nav>
+  <button data-view="today">Today</button>
+  <button data-view="foods">My foods</button>
+  <button data-view="more">More</button>
+</nav>
+<div class="over" id="over"><div class="wrap" id="overBody"></div></div>
+<div class="sheetbg" id="sheetbg"><div class="sheet" id="sheet"></div></div>
+<div id="toast"></div>
+
+<script src="logic.js"></script>
+<script src="cnf.js"></script>
+<script>
+'use strict';
+/* ===================== Food log: storage and screen =====================
+   All arithmetic and parsing is in logic.js (global F). The food database is cnf.js (global CNF).
+   Everything the user enters stays on this device, in IndexedDB. See ../FOOD.md. */
+const VERSION = '1.0.0';
+const $ = s => document.querySelector(s);
+const h = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
+
+/* ---------- storage ---------- */
+const STORES = ['foods', 'recipes', 'log', 'kv'];
+let db = null;
+function dbOpen() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('foodlog', 1);
+    r.onupgradeneeded = () => { for (const s of STORES) r.result.createObjectStore(s, { keyPath: s === 'kv' ? 'key' : 'id' }); };
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+/* One transaction: every change in `ops` is saved, or none is. ops: [[store, 'put'|'delete'|'clear', value]] */
+function dbWrite(ops) {
+  return new Promise((res, rej) => {
+    const tx = db.transaction(STORES, 'readwrite');
+    for (const [store, op, val] of ops) {
+      const st = tx.objectStore(store);
+      if (op === 'put') st.put(val); else if (op === 'delete') st.delete(val); else st.clear();
+    }
+    tx.oncomplete = () => res(); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error || new Error('Save cancelled'));
+  });
+}
+function dbAll(store) {
+  return new Promise((res, rej) => { const r = db.transaction(store).objectStore(store).getAll(); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function kvSet(key, value) { S.kv[key] = value; await dbWrite([['kv', 'put', { key, value }]]); }
+async function loadAll() {
+  S.foods = await dbAll('foods'); S.recipes = await dbAll('recipes'); S.log = await dbAll('log');
+  S.kv = {}; for (const r of await dbAll('kv')) S.kv[r.key] = r.value;
+  rebuildIndex();
+}
+const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+
+/* ---------- foods ---------- */
+function rebuildIndex() {
+  const idx = [];
+  for (const r of S.recipes) idx.push(F.indexItem({ ref: { t: 'r', id: r.id }, name: r.name, alt: 'recipe recette' }));
+  for (const f of S.foods) idx.push(F.indexItem({ ref: { t: 'u', id: f.id }, name: f.name, alt: '' }));
+  S.index = idx.concat(S.cnfIndex);
+}
+const refKey = ref => ref.t + ':' + ref.id;
+/* ref -> { name, unit, per100, measures:[[label, amountInUnit]], source } or null when it no longer exists */
+function resolve(ref) {
+  if (ref.t === 'c') {
+    const f = S.cnf.get(ref.id); if (!f) return null;
+    const per100 = {}; CNF.keys.forEach((k, i) => per100[k] = f[4][i]);
+    return { name: f[1], unit: 'g', per100, measures: f[5], source: 'database' };
+  }
+  if (ref.t === 'u') {
+    const f = S.foods.find(x => x.id === ref.id); if (!f) return null;
+    return { name: f.name, unit: f.unit, per100: f.per100, measures: [[f.servingLabel || '1 serving', f.serving]], source: f.source };
+  }
+  const r = S.recipes.find(x => x.id === ref.id); if (!r) return null;
+  return { name: r.name, unit: 'g', per100: r.per100, measures: r.portion_g > 0 ? [['1 portion', r.portion_g]] : [], source: 'recipe' };
+}
+function targets() {
+  const t = {}; const saved = S.kv.targets || {};
+  for (const n of F.NUTRIENTS) t[n.key] = Object.assign({ target: n.target, max: n.max }, saved[n.key] || {});
+  return t;
+}
+
+/* ---------- small helpers ---------- */
+let toastTimer;
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(toastTimer); toastTimer = setTimeout(() => t.style.display = 'none', 2600); }
+function fail(e) { console.error(e); toast('Not saved: ' + (e && e.message || e)); }
+function dayName(d) {
+  const today = F.ymd(new Date());
+  if (d === today) return 'Today'; if (d === F.addDays(today, -1)) return 'Yesterday';
+  return new Date(d + 'T12:00:00').toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+function bar(value, t, cls) {
+  const goal = t.target || t.max; if (!goal) return '';
+  const pct = Math.max(0, Math.min(100, value / goal * 100));
+  const over = t.max && value > t.max;
+  return '<div class="bar"><i class="' + (over ? 'toomuch' : cls || '') + '" style="width:' + pct + '%"></i></div>';
+}
+function openOver(html) { $('#overBody').innerHTML = html; $('#over').classList.add('on'); $('#over').scrollTop = 0; }
+function closeOver() { $('#over').classList.remove('on'); $('#overBody').innerHTML = ''; }
+function openSheet(html) { $('#sheet').innerHTML = html; $('#sheetbg').classList.add('on'); }
+function closeSheet() { $('#sheetbg').classList.remove('on'); $('#sheet').innerHTML = ''; }
+$('#sheetbg').addEventListener('click', e => { if (e.target.id === 'sheetbg') closeSheet(); });
+
+/* ===================== Today ===================== */
+function render() {
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.view === S.view));
+  $('#fab').style.display = S.view === 'today' ? '' : 'none';
+  ({ today: renderToday, foods: renderFoods, more: renderMore })[S.view]();
+}
+function renderToday() {
+  const entries = S.log.filter(e => e.date === S.date).sort((a, b) => (a.time || '').localeCompare(b.time || ''));
+  const s = F.sum(entries.map(e => e.nut)), T = targets(), tot = s.total;
+  const macro = (k, cls) => { const n = F.NUTRIENTS.find(x => x.key === k);
+    return '<div><div class="small dim">' + n.name + '</div><div class="num"><b>' + F.round(tot[k], 'g') + '</b><span class="dim small"> / ' + (T[k].target || '') + ' g</span></div>' + bar(tot[k], T[k], cls) + '</div>'; };
+  let html = '<div class="top"><button id="prev" aria-label="Previous day">&#8249;</button><h1>' + h(dayName(S.date)) + '</h1><button id="next" aria-label="Next day">&#8250;</button></div>';
+  html += '<div class="card"><div class="row"><div class="grow"><span class="big num">' + Math.round(tot.kcal) + '</span> <span class="dim">/ ' + (T.kcal.target || '') + ' kcal</span></div>' +
+    '<div class="dim small right">' + (T.kcal.target ? Math.round(T.kcal.target - tot.kcal) + ' left' : '') + '</div></div>' + bar(tot.kcal, T.kcal) +
+    '<div class="macros">' + macro('protein', 'blue') + macro('carbs', 'warn') + macro('fat', '') + '</div></div>';
+  html += '<div class="card">' + (entries.length ? '<ul class="list">' + entries.map(e =>
+    '<li data-entry="' + e.id + '"><div class="grow"><div class="ell">' + h(e.name) + '</div><div class="small dim">' + h(amountText(e)) + '</div></div><div class="num right">' + Math.round(e.nut.kcal || 0) + '<span class="dim small"> kcal</span></div></li>').join('') + '</ul>'
+    : '<div class="dim">Nothing logged for this day. Tap <b>Add food</b>.</div>') + '</div>';
+  if (entries.length) {
+    const partial = entries.filter(e => e.nut.vitc === null || e.nut.vitc === undefined).length;
+    for (const [g, title] of [['detail', 'Details'], ['mineral', 'Minerals'], ['vitamin', 'Vitamins'], ['other', 'Other']]) {
+      html += '<h2>' + title + '</h2><div class="card">' + F.NUTRIENTS.filter(n => n.group === g).map(n => {
+        const t = T[n.key], goal = t.target || t.max, v = tot[n.key];
+        return '<div class="nut"><div>' + n.name + (s.missing[n.key] ? '<span class="tag">' + (entries.length - s.missing[n.key]) + ' of ' + entries.length + ' items</span>' : '') + '</div><div class="num">' + F.round(v, n.unit) + ' <span class="dim small">' + n.unit + '</span></div><div class="num small dim right">' + (goal ? Math.round(v / goal * 100) + '%' : '') + '</div>' + bar(v, t) + '</div>';
+      }).join('') + '</div>';
+      if (g === 'detail' && partial) html += '<div class="note">' + partial + ' of today\'s ' + entries.length + ' items come from a package label, which carries no vitamins and only four minerals. Lines marked "x of y items" are a minimum.</div>';
+    }
+  }
+  $('#main').innerHTML = html;
+  $('#prev').onclick = () => { S.date = F.addDays(S.date, -1); render(); };
+  $('#next').onclick = () => { S.date = F.addDays(S.date, 1); render(); };
+  document.querySelectorAll('[data-entry]').forEach(li => li.onclick = () => editEntry(li.dataset.entry));
+}
+function amountText(e) {
+  const base = F.round(e.amount, 'g') + ' ' + e.unit;
+  return e.measure ? F.round(e.qty, 'g') + ' x ' + e.measure + ' (' + base + ')' : base;
+}
+
+/* ===================== Add food ===================== */
+/* pick: null to log to the diary, or a function(ref, food, parsed) used by the recipe editor */
+let picker = null;
+function openAdd(pick) {
+  picker = pick || null;
+  openOver('<div class="row" style="margin-bottom:10px"><button id="back" aria-label="Back">&#8249;</button><input id="q" placeholder="130 g banana, 2 eggs, poutine..." autocomplete="off" autocapitalize="off" enterkeyhint="search"></div><div id="results"></div>');
+  $('#back').onclick = closeOver;
+  $('#q').oninput = renderResults;
+  renderResults(); setTimeout(() => $('#q') && $('#q').focus(), 50);
+}
+function renderResults() {
+  const text = $('#q').value, parsed = F.parseQuick(text), box = $('#results');
+  if (!parsed.query) {
+    const last = S.kv.last || {};
+    const recent = Object.keys(last).map(k => ({ k, v: last[k] })).sort((a, b) => b.v.at - a.v.at).slice(0, 25)
+      .map(x => { const [t, id] = [x.k[0], x.k.slice(2)]; const ref = { t, id: t === 'c' ? Number(id) : id }; return { ref, food: resolve(ref), v: x.v }; }).filter(x => x.food);
+    let html = picker ? '' : '<div class="grid2" style="margin-bottom:12px"><button id="scan">Scan a label</button><button id="hand">Add by hand</button></div>';
+    html += '<h2>Recent</h2><div class="card">' + (recent.length ? '<ul class="list">' + recent.map((x, i) =>
+      '<li data-i="' + i + '"><div class="grow"><div class="ell">' + h(x.food.name) + '</div><div class="small dim">' + h(amountText(x.v)) + '</div></div>' + (picker ? '' : '<button class="plus" data-again="' + i + '" aria-label="Add again">+</button>') + '</li>').join('') + '</ul>'
+      : '<div class="dim">What you log will show up here, one tap to add it again.</div>') + '</div>';
+    box.innerHTML = html;
+    if (!picker) { $('#scan').onclick = () => openFoodForm(null, true); $('#hand').onclick = () => openFoodForm(null, false); }
+    box.querySelectorAll('li').forEach(li => li.onclick = ev => {
+      const x = recent[li.dataset.i];
+      if (ev.target.dataset.again !== undefined) return addEntry(x.ref, x.food, x.v.amount, x.v.qty, x.v.measure);
+      choose(x.ref, x.food, x.v.measure ? { count: x.v.qty, measure: x.v.measure } : { amount: x.v.amount });
+    });
+    return;
+  }
+  const found = F.search(S.index, parsed.query, S.kv.uses || {}, 40);
+  box.innerHTML = found.length ? '<div class="card"><ul class="list">' + found.map((it, i) =>
+    '<li data-i="' + i + '"><div class="grow"><div>' + h(it.name) + (it.ref.t === 'r' ? '<span class="tag">recipe</span>' : it.ref.t === 'u' ? '<span class="tag">mine</span>' : '') + '</div>' +
+    (it.ref.t === 'c' && it.alt ? '<div class="small dim ell">' + h(it.alt) + '</div>' : '') + '</div></li>').join('') + '</ul></div>'
+    : '<div class="card dim">Nothing found for "' + h(parsed.query) + '". Try another word (English or French), or use Add by hand to enter it once with the numbers you have.</div>' + (picker ? '' : '<button id="hand2">Add by hand</button>');
+  box.querySelectorAll('li').forEach(li => li.onclick = () => { const it = found[li.dataset.i]; choose(it.ref, resolve(it.ref), parsed); });
+  if ($('#hand2')) $('#hand2').onclick = () => openFoodForm(null, false, parsed.query);
+}
+function choose(ref, food, parsed) {
+  if (picker) { picker(ref, food, parsed); closeOver(); return; }
+  amountSheet(ref, food, parsed, null);
+}
+/* The one place an amount is chosen. entry = an existing diary line when editing. */
+function amountSheet(ref, food, parsed, entry) {
+  parsed = parsed || {};
+  const ms = food.measures || [];
+  let mi = -1, qty;
+  if (entry) { mi = entry.measure ? ms.findIndex(m => m[0] === entry.measure) : -1; qty = mi >= 0 ? entry.qty : entry.amount; }
+  else if (parsed.amount) qty = parsed.amount;
+  else if (parsed.measure && ms.findIndex(m => m[0] === parsed.measure) >= 0) { mi = ms.findIndex(m => m[0] === parsed.measure); qty = parsed.count || 1; }
+  else if (parsed.count && ms.length) { mi = Math.max(0, ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/\bml\b/.test(m[0]))); qty = parsed.count; }
+  else if (ref.t !== 'c' && ms.length) { mi = 0; qty = 1; }     /* own food or recipe: one serving, never "100" */
+  else qty = parsed.count || 100;
+  openSheet('<h1 style="margin-bottom:4px">' + h(food.name) + '</h1><div class="small dim" id="per"></div>' +
+    '<div class="grid2" style="margin-top:12px"><div><label>Amount</label><input id="amt" type="number" inputmode="decimal" step="any" min="0" value="' + qty + '"></div>' +
+    '<div><label>Unit</label><select id="unit"><option value="-1">' + food.unit + '</option>' + ms.map((m, i) => '<option value="' + i + '"' + (i === mi ? ' selected' : '') + '>' + h(m[0]) + ' (' + m[1] + ' ' + food.unit + ')</option>').join('') + '</select></div></div>' +
+    '<div class="card" style="margin:14px 0;background:#11151a" id="preview"></div><div id="warn"></div>' +
+    '<div class="row">' + (entry ? '<button class="danger" id="del">Delete</button>' : '') + '<button class="primary grow" id="ok">' + (entry ? 'Save' : 'Add to ' + h(dayName(S.date))) + '</button></div>');
+  const calc = () => {
+    const i = Number($('#unit').value), q = parseFloat($('#amt').value) || 0, amount = i >= 0 ? q * ms[i][1] : q;
+    const n = F.scale(food.per100, amount);
+    $('#per').textContent = F.round(amount, 'g') + ' ' + food.unit + ' · ' + food.source;
+    $('#preview').innerHTML = '<div class="row"><div class="grow big num">' + Math.round(n.kcal || 0) + ' <span class="dim" style="font-size:15px;font-weight:400">kcal</span></div><div class="small dim right">P ' + F.round(n.protein, 'g') + ' g<br>C ' + F.round(n.carbs, 'g') + ' g · F ' + F.round(n.fat, 'g') + ' g</div></div>';
+    $('#warn').innerHTML = n.kcal > 2500 ? '<div class="note">That is ' + Math.round(n.kcal) + ' kcal in one entry. Check the amount and the unit.</div>' : '';
+    return { amount, qty: q, measure: i >= 0 ? ms[i][0] : null };
+  };
+  $('#amt').oninput = calc; $('#unit').onchange = calc; calc();
+  $('#ok').onclick = async () => {
+    const c = calc(); if (!(c.amount > 0)) return toast('Enter an amount above zero');
+    if (entry) {
+      const upd = Object.assign({}, entry, { amount: c.amount, qty: c.qty, measure: c.measure, nut: F.scale(food.per100, c.amount) });
+      try { await dbWrite([['log', 'put', upd]]); S.log[S.log.findIndex(e => e.id === entry.id)] = upd; closeSheet(); render(); } catch (e) { fail(e); }
+    } else { await addEntry(ref, food, c.amount, c.qty, c.measure); }
+  };
+  if (entry) $('#del').onclick = async () => {
+    try { await dbWrite([['log', 'delete', entry.id]]); S.log = S.log.filter(e => e.id !== entry.id); closeSheet(); render(); } catch (e) { fail(e); }
+  };
+}
+async function addEntry(ref, food, amount, qty, measure) {
+  const now = new Date();
+  const e = { id: newId('e'), date: S.date, time: String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0'),
+    ref, name: food.name, amount, unit: food.unit, qty: measure ? qty : amount, measure: measure || null, source: food.source, nut: F.scale(food.per100, amount) };
+  const uses = Object.assign({}, S.kv.uses), last = Object.assign({}, S.kv.last), k = refKey(ref);
+  uses[k] = (uses[k] || 0) + 1; last[k] = { amount, qty: e.qty, measure: e.measure, unit: food.unit, at: Date.now() };
+  try {
+    await dbWrite([['log', 'put', e], ['kv', 'put', { key: 'uses', value: uses }], ['kv', 'put', { key: 'last', value: last }]]);
+    S.log.push(e); S.kv.uses = uses; S.kv.last = last;
+    closeSheet(); closeOver(); S.view = 'today'; render(); toast('Added ' + food.name);
+  } catch (err) { fail(err); }
+}
+function editEntry(id) {
+  const e = S.log.find(x => x.id === id); if (!e) return;
+  /* The entry keeps its own numbers. If its food was deleted since, only the weight can change. */
+  const food = resolve(e.ref) || { name: e.name, unit: e.unit, source: e.source, measures: [],
+    per100: Object.fromEntries(F.KEYS.map(k => [k, e.nut[k] === null || e.nut[k] === undefined ? null : e.nut[k] / e.amount * 100])) };
+  amountSheet(e.ref, Object.assign({}, food, { name: e.name }), null, e);
+}
+
+/* ===================== My foods ===================== */
+function renderFoods() {
+  const rec = S.foodsTab === 'recipes';
+  let html = '<div class="top"><h1>My foods</h1></div><div class="seg"><button data-tab="recipes" class="' + (rec ? 'on' : '') + '">Recipes (' + S.recipes.length + ')</button><button data-tab="foods" class="' + (rec ? '' : 'on') + '">Packaged (' + S.foods.length + ')</button></div>';
+  if (rec) {
+    html += '<button class="primary" id="newRecipe" style="width:100%;margin-bottom:12px">New recipe</button><div class="card">' + (S.recipes.length ? '<ul class="list">' +
+      S.recipes.slice().sort((a, b) => a.name.localeCompare(b.name)).map(r => { const p = r.portion_g > 0 ? F.scale(r.per100, r.portion_g) : null;
+        return '<li data-recipe="' + r.id + '"><div class="grow"><div class="ell">' + h(r.name) + '</div><div class="small dim">' + (p ? Math.round(p.kcal) + ' kcal, ' + F.round(p.protein, 'g') + ' g protein per ' + r.portion_g + ' g portion' : Math.round(r.per100.kcal) + ' kcal per 100 g') + '</div></div></li>'; }).join('') + '</ul>'
+      : '<div class="dim">No recipe yet. A recipe is entered once (ingredients by weight, then the cooked weight), and after that one portion is a single tap.</div>') + '</div>';
+  } else {
+    html += '<div class="grid2" style="margin-bottom:12px"><button class="primary" id="scan">Scan a label</button><button id="hand">Add by hand</button></div><div class="card">' + (S.foods.length ? '<ul class="list">' +
+      S.foods.slice().sort((a, b) => a.name.localeCompare(b.name)).map(f => '<li data-food="' + f.id + '"><div class="grow"><div class="ell">' + h(f.name) + '</div><div class="small dim">' + Math.round(f.vals.kcal || 0) + ' kcal per ' + h(f.servingLabel || 'serving') + ' (' + f.serving + ' ' + f.unit + ')</div></div></li>').join('') + '</ul>'
+      : '<div class="dim">Photograph the Nutrition Facts table of a package once. After that the product is in your list for good.</div>') + '</div>';
+  }
+  $('#main').innerHTML = html;
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { S.foodsTab = b.dataset.tab; render(); });
+  if (rec) { $('#newRecipe').onclick = () => openRecipe(null); document.querySelectorAll('[data-recipe]').forEach(li => li.onclick = () => openRecipe(li.dataset.recipe)); }
+  else { $('#scan').onclick = () => openFoodForm(null, true); $('#hand').onclick = () => openFoodForm(null, false);
+    document.querySelectorAll('[data-food]').forEach(li => li.onclick = () => openFoodForm(li.dataset.food, false)); }
+}
+
+/* ---------- packaged food: label photo or by hand ---------- */
+const LABEL_FIELDS = [['kcal', 'Calories', 'kcal'], ['fat', 'Fat', 'g'], ['satfat', 'Saturated', 'g'], ['transfat', 'Trans', 'g'], ['carbs', 'Carbohydrate', 'g'], ['fibre', 'Fibre', 'g'],
+  ['sugars', 'Sugars', 'g'], ['protein', 'Protein', 'g'], ['chol', 'Cholesterol', 'mg'], ['sodium', 'Sodium', 'mg'], ['potassium', 'Potassium', 'mg'], ['calcium', 'Calcium', 'mg'], ['iron', 'Iron', 'mg']];
+function openFoodForm(id, scanNow, name) {
+  const f = id ? S.foods.find(x => x.id === id) : null;
+  openOver('<div class="top"><button id="back" aria-label="Back">&#8249;</button><h1>' + (f ? 'Edit food' : 'New packaged food') + '</h1><span style="width:44px"></span></div>' +
+    '<button id="shoot" style="width:100%">' + (f ? 'Read the label again from a photo' : 'Take a photo of the Nutrition Facts table') + '</button>' +
+    '<input id="file" type="file" accept="image/*" capture="environment" style="display:none"><div id="ocr" class="small dim" style="margin:8px 2px"></div><div id="lwarn"></div>' +
+    '<label>Name</label><input id="fname" placeholder="Product name" value="' + h(f ? f.name : name || '') + '">' +
+    '<div class="grid2"><div id="servBox"><label>Serving size</label><input id="serv" type="number" inputmode="decimal" step="any" value="' + (f ? f.serving : '') + '"></div>' +
+    '<div><label>in</label><select id="sunit"><option' + (f && f.unit === 'ml' ? '' : ' selected') + '>g</option><option' + (f && f.unit === 'ml' ? ' selected' : '') + '>ml</option></select></div></div>' +
+    '<label>Serving is called (optional)</label><input id="slabel" placeholder="2 cookies, 1 cup, 1 bar..." value="' + h(f ? f.servingLabel || '' : '') + '">' +
+    '<h2>Per serving, as printed</h2><div class="card"><div class="grid2">' + LABEL_FIELDS.map(([k, n, u]) => '<div id="box_' + k + '"><label>' + n + ' (' + u + ')</label><input id="v_' + k + '" type="number" inputmode="decimal" step="any" value="' + (f && f.vals[k] !== undefined && f.vals[k] !== null ? f.vals[k] : '') + '"></div>').join('') + '</div></div>' +
+    '<div class="row">' + (f ? '<button class="danger" id="fdel">Delete</button>' : '') + '<button class="primary grow" id="fsave">Save</button></div>');
+  $('#back').onclick = closeOver;
+  $('#shoot').onclick = () => $('#file').click();
+  $('#file').onchange = async ev => { const file = ev.target.files[0]; ev.target.value = ''; if (file) await readLabel(file); };
+  $('#fsave').onclick = () => saveFood(f);
+  if (f) $('#fdel').onclick = async () => { try { await dbWrite([['foods', 'delete', f.id]]); S.foods = S.foods.filter(x => x.id !== f.id); rebuildIndex(); closeOver(); render(); toast('Deleted. Past diary entries keep their numbers.'); } catch (e) { fail(e); } };
+  if (scanNow) $('#file').click();
+}
+let ocrWorker = null;
+async function readLabel(file) {
+  const status = m => { if ($('#ocr')) $('#ocr').textContent = m; };
+  try {
+    status('Reading the label on this phone...');
+    const canvas = await shrink(file, 1800);
+    if (!ocrWorker) {
+      await loadScript('vendor/tesseract.min.js');
+      const at = p => new URL(p, location.href).href;
+      ocrWorker = await Tesseract.createWorker(['eng', 'fra'], 1, { workerPath: at('vendor/worker.min.js'), corePath: at('vendor/'), langPath: at('vendor/lang/'), gzip: true });
+    }
+    const out = await ocrWorker.recognize(canvas);
+    fillLabel(F.parseLabel(out.data.text));
+  } catch (e) { console.error(e); status('Could not read this photo (' + (e && e.message || e) + '). Type the numbers, or try another photo.'); }
+}
+function fillLabel(r) {
+  for (const [k] of LABEL_FIELDS) { $('#v_' + k).value = r.vals[k] !== undefined ? r.vals[k] : ''; $('#box_' + k).classList.toggle('flag', r.vals[k] === undefined || (r.warnings.includes('energy') && ['kcal', 'fat', 'carbs', 'protein'].includes(k)) || r.warnings.includes(k)); }
+  if (r.serving) { $('#serv').value = r.serving; $('#sunit').value = r.unit; }
+  $('#servBox').classList.toggle('flag', !r.serving);
+  if (r.servingLabel && !$('#slabel').value) $('#slabel').value = r.servingLabel;
+  $('#ocr').textContent = r.found ? 'Read ' + r.found + ' of ' + LABEL_FIELDS.length + ' values. Boxes outlined in yellow were not read or look off: compare them with the package.' : 'No numbers found in this photo. Fill the table well in the frame, flat and without glare, or type the values.';
+  const w = [];
+  if (r.warnings.includes('energy')) w.push('The calories do not match the fat, carbohydrate and protein read. One of those four is probably misread.');
+  if (r.warnings.includes('serving')) w.push('The serving size was not read. Type it: it is on the first line of the table ("Per ...").');
+  $('#lwarn').innerHTML = w.map(x => '<div class="note">' + x + '</div>').join('');
+}
+function shrink(file, max) {
+  return new Promise((res, rej) => {
+    const img = new Image(), url = URL.createObjectURL(file);
+    img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c); };       /* the photo itself is never stored */
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('not an image')); }; img.src = url;
+  });
+}
+function loadScript(src) { return new Promise((res, rej) => { if (window.Tesseract) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('text reader not loaded')); document.head.appendChild(s); }); }
+async function saveFood(existing) {
+  const name = $('#fname').value.trim(), serving = parseFloat($('#serv').value), vals = {};
+  for (const [k] of LABEL_FIELDS) { const v = $('#v_' + k).value; if (v !== '') vals[k] = parseFloat(v); }
+  if (!name) return toast('Give it a name');
+  if (!(serving > 0)) return toast('Enter the serving size');
+  if (vals.kcal === undefined) return toast('Calories are needed at least');
+  /* Same name as an existing food: update that one instead of creating a twin. */
+  const same = existing || S.foods.find(x => F.norm(x.name) === F.norm(name));
+  const food = { id: same ? same.id : newId('u'), name, unit: $('#sunit').value, serving, servingLabel: $('#slabel').value.trim(), vals,
+    per100: F.servingToPer100(vals, serving), source: 'label', created: same ? same.created : Date.now() };
+  try {
+    await dbWrite([['foods', 'put', food]]);
+    S.foods = S.foods.filter(x => x.id !== food.id).concat([food]); rebuildIndex(); closeOver();
+    if (S.view === 'today') amountSheet({ t: 'u', id: food.id }, resolve({ t: 'u', id: food.id }), {}, null); else render();
+    toast(same && !existing ? 'Updated the existing "' + name + '"' : 'Saved');
+  } catch (e) { fail(e); }
+}
+
+/* ---------- recipes ---------- */
+let R = null;
+function openRecipe(id) {
+  const r = id ? S.recipes.find(x => x.id === id) : null;
+  R = r ? JSON.parse(JSON.stringify(r)) : { id: null, name: '', items: [], batch_g: '', portion_g: '' };
+  drawRecipe();
+}
+function drawRecipe() {
+  const live = R.items.map(it => { const f = resolve(it.ref); return f ? Object.assign({}, it, { per100: f.per100, name: f.name, unit: f.unit }) : it; });
+  const c = F.recipePer100(live, R.batch_g);
+  openOver('<div class="top"><button id="back" aria-label="Back">&#8249;</button><h1>' + (R.id ? 'Recipe' : 'New recipe') + '</h1><span style="width:44px"></span></div>' +
+    '<label>Name</label><input id="rname" placeholder="Mercimek, egg squares..." value="' + h(R.name) + '">' +
+    '<h2>Ingredients, raw weight</h2><div class="card">' + (live.length ? live.map((it, i) => '<div class="ing"><div class="ell">' + h(it.name) + '</div><input type="number" inputmode="decimal" step="any" data-amt="' + i + '" value="' + it.amount + '" aria-label="' + h(it.name) + ' amount in ' + it.unit + '"><button data-rm="' + i + '" aria-label="Remove">&#215;</button></div>').join('') : '<div class="dim">Add each ingredient with the weight that went into the pot.</div>') +
+    '<button id="addIng" style="width:100%;margin-top:10px">+ Add ingredient</button></div>' +
+    '<div class="grid2"><div><label>Cooked weight of the whole batch (g)</label><input id="batch" type="number" inputmode="decimal" step="any" placeholder="' + Math.round(c.raw) + '" value="' + h(R.batch_g) + '"></div>' +
+    '<div><label>One portion (g)</label><input id="portion" type="number" inputmode="decimal" step="any" value="' + h(R.portion_g) + '"></div></div>' +
+    '<div class="small dim" style="margin:6px 2px">Weigh the finished dish if you can. Left empty, the raw weights are added up, which overstates the weight of anything that loses water.</div>' +
+    '<div class="card" style="margin-top:12px" id="rsum"></div>' +
+    '<details style="margin:4px 2px 14px"><summary class="dim small">Paste a recipe prepared in a chat</summary><textarea id="paste" rows="4" style="margin-top:8px" placeholder="Paste the block here"></textarea><button id="doPaste" style="margin-top:8px">Load it</button></details>' +
+    '<div class="row">' + (R.id ? '<button class="danger" id="rdel">Delete</button>' : '') + '<button class="primary grow" id="rsave">Save recipe</button></div>');
+  const keep = () => { R.name = $('#rname').value; R.batch_g = $('#batch').value; R.portion_g = $('#portion').value; };
+  $('#back').onclick = () => { R = null; closeOver(); };
+  /* Typing never redraws the screen (that would take the keyboard away): only the summary updates. */
+  const summary = () => {
+    keep();
+    const now = R.items.map(it => { const f = resolve(it.ref); return Object.assign({}, it, { per100: f ? f.per100 : {} }); });
+    const c = F.recipePer100(now, R.batch_g), whole = F.scale(c.per100, c.weight), per = R.portion_g > 0 ? F.scale(c.per100, R.portion_g) : null;
+    $('#batch').placeholder = Math.round(c.raw);
+    $('#rsum').innerHTML = '<div class="row"><div class="grow">Whole batch</div><div class="num">' + Math.round(whole.kcal || 0) + ' kcal · ' + F.round(whole.protein, 'g') + ' g protein</div></div>' +
+      (per ? '<div class="row" style="margin-top:6px"><div class="grow">Per ' + h(R.portion_g) + ' g portion <span class="dim small">(' + F.round(c.weight / R.portion_g, 'g') + ' portions)</span></div><div class="num"><b>' + Math.round(per.kcal || 0) + ' kcal</b> · ' + F.round(per.protein, 'g') + ' g protein</div></div>' : '');
+  };
+  $('#batch').oninput = $('#portion').oninput = summary;
+  document.querySelectorAll('[data-amt]').forEach(inp => inp.oninput = () => { R.items[inp.dataset.amt].amount = parseFloat(inp.value) || 0; summary(); });
+  summary();
+  document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { keep(); R.items.splice(b.dataset.rm, 1); drawRecipe(); });
+  $('#addIng').onclick = () => { keep(); const mine = R; openAdd((ref, food, parsed) => {
+    if (ref.t === 'r' && ref.id === mine.id) { toast('A recipe cannot contain itself'); }
+    else { const m = (food.measures || [])[0];
+      mine.items.push({ ref, name: food.name, unit: food.unit, amount: parsed.amount || (parsed.count && m ? Math.round(parsed.count * m[1] * 10) / 10 : (ref.t !== 'c' && m ? m[1] : 100)) }); }
+    R = mine; setTimeout(drawRecipe, 0); }); };
+  $('#doPaste').onclick = () => { keep(); pasteRecipe($('#paste').value); };
+  $('#rsave').onclick = () => { keep(); saveRecipe(); };
+  if (R.id) $('#rdel').onclick = async () => { const id = R.id; try { await dbWrite([['recipes', 'delete', id]]); S.recipes = S.recipes.filter(x => x.id !== id); rebuildIndex(); R = null; closeOver(); render(); toast('Deleted. Past diary entries keep their numbers.'); } catch (e) { fail(e); } };
+}
+/* Block format: {"name":"...","batch_g":3617,"portion_g":390,"items":[{"code":2683,"g":1300},{"name":"my label food","g":460}]} */
+function pasteRecipe(text) {
+  let d; try { d = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf('}') + 1)); } catch (e) { return toast('That block is not readable'); }
+  const items = [], missing = [];
+  for (const it of d.items || []) {
+    let ref = null;
+    if (it.code && S.cnf.has(Number(it.code))) ref = { t: 'c', id: Number(it.code) };
+    else if (it.name) { const hit = F.search(S.index, it.name, S.kv.uses || {}, 1)[0]; if (hit) ref = hit.ref; }
+    const food = ref && resolve(ref);
+    if (food && Number(it.g) > 0) items.push({ ref, name: food.name, unit: food.unit, amount: Number(it.g) }); else missing.push(it.name || it.code);
+  }
+  if (missing.length) return toast('Nothing loaded. Not found: ' + missing.join(', '));      /* all or nothing */
+  R.name = d.name || R.name; R.batch_g = d.batch_g || ''; R.portion_g = d.portion_g || ''; R.items = items; drawRecipe(); toast('Loaded ' + items.length + ' ingredients. Check, then Save.');
+}
+async function saveRecipe() {
+  const name = R.name.trim();
+  if (!name) return toast('Give the recipe a name');
+  if (!R.items.length) return toast('Add at least one ingredient');
+  const live = [];
+  for (const it of R.items) {
+    const f = resolve(it.ref);
+    if (!f) return toast('"' + it.name + '" no longer exists. Remove it or add it again.');   /* never save a recipe with a hole in it */
+    if (!(it.amount > 0)) return toast('"' + f.name + '" needs a weight above zero');
+    live.push({ ref: it.ref, name: f.name, unit: f.unit, amount: it.amount, per100: f.per100 });
+  }
+  const c = F.recipePer100(live, R.batch_g);
+  const same = R.id ? S.recipes.find(x => x.id === R.id) : S.recipes.find(x => F.norm(x.name) === F.norm(name));
+  const rec = { id: same ? same.id : newId('r'), name, items: live.map(({ per100, ...rest }) => rest), batch_g: Number(R.batch_g) > 0 ? Number(R.batch_g) : '',
+    portion_g: Number(R.portion_g) > 0 ? Number(R.portion_g) : '', weight: c.weight, per100: c.per100, created: same ? same.created : Date.now(), updated: Date.now() };
+  try {
+    await dbWrite([['recipes', 'put', rec]]);
+    S.recipes = S.recipes.filter(x => x.id !== rec.id).concat([rec]); rebuildIndex(); R = null; closeOver(); render();
+    toast('Recipe saved');
+  } catch (e) { fail(e); }
+}
+
+/* ===================== More: targets, export, backup ===================== */
+function renderMore() {
+  const T = targets(), days = new Set(S.log.map(e => e.date)).size;
+  const lastB = S.kv.lastBackup ? new Date(S.kv.lastBackup).toLocaleDateString('en-CA') : 'never';
+  $('#main').innerHTML = '<div class="top"><h1>More</h1></div>' +
+    '<h2>Your data</h2><div class="card"><div>' + S.log.length + ' entries over ' + days + ' days, ' + S.recipes.length + ' recipes, ' + S.foods.length + ' packaged foods.</div>' +
+    '<div class="small dim" style="margin:6px 0 12px">Kept on this phone since ' + (S.kv.firstOpen ? new Date(S.kv.firstOpen).toLocaleDateString('en-CA') : 'today') + '. ' + (S.persisted ? 'The browser has agreed not to clear it on its own.' : 'The browser has not promised to keep it: add the app to the home screen, and save a backup now and then.') + ' Last backup: ' + lastB + '.</div>' +
+    '<button class="primary" id="xlsx" style="width:100%;margin-bottom:8px">Export a spreadsheet (.xlsx)</button><div class="grid2"><button id="backup">Save a backup file</button><button id="restore">Restore a backup</button></div>' +
+    '<input id="rfile" type="file" accept="application/json,.json" style="display:none"></div>' +
+    '<h2>Daily targets</h2><div class="card"><div class="small dim" style="margin-bottom:8px">General adult reference values to start with. Change any of them. Sodium and saturated fat are ceilings.</div><div class="grid2">' +
+    F.NUTRIENTS.filter(n => n.target || n.max).map(n => '<div><label>' + n.name + ' (' + n.unit + ')</label><input type="number" inputmode="decimal" step="any" data-target="' + n.key + '" value="' + (T[n.key].target || T[n.key].max) + '"></div>').join('') + '</div></div>' +
+    '<div class="small dim" style="text-align:center;margin:16px 0">Food log ' + VERSION + ' · food values: Canadian Nutrient File 2026, Health Canada · nothing leaves this phone</div>';
+  document.querySelectorAll('[data-target]').forEach(inp => inp.onchange = async () => {
+    const n = F.NUTRIENTS.find(x => x.key === inp.dataset.target), v = parseFloat(inp.value); if (!(v > 0)) return;
+    const saved = Object.assign({}, S.kv.targets); saved[n.key] = n.target ? { target: v } : { max: v };
+    try { await kvSet('targets', saved); toast('Saved'); } catch (e) { fail(e); }
+  });
+  $('#xlsx').onclick = exportXlsx; $('#backup').onclick = saveBackup;
+  $('#restore').onclick = () => $('#rfile').click();
+  $('#rfile').onchange = ev => { const f = ev.target.files[0]; ev.target.value = ''; if (f) restoreBackup(f); };
+}
+function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
+function exportXlsx() {
+  const head = ['name', 'unit', 'serving', 'serving_name'].concat(F.LABEL_KEYS.map(k => k + '_per_serving'));
+  const sheets = [{ name: 'Log', rows: F.logTable(S.log) }, { name: 'Days', rows: F.dayTable(S.log) },
+    { name: 'Recipes', rows: [['recipe', 'batch_weight_g', 'portion_g', 'ingredient', 'amount', 'unit', 'kcal_per_100g', 'protein_per_100g']].concat(S.recipes.flatMap(r => r.items.map(it => [r.name, r.weight, r.portion_g || '', it.name, it.amount, it.unit, Math.round(r.per100.kcal * 10) / 10, Math.round((r.per100.protein || 0) * 10) / 10]))) },
+    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || ''].concat(F.LABEL_KEYS.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
+  download('food-log-' + F.ymd(new Date()) + '.xlsx', new Blob([F.xlsx(sheets)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+}
+async function saveBackup() {
+  const data = { app: 'kitchen-food-log', version: 1, exported: new Date().toISOString(), foods: S.foods, recipes: S.recipes, log: S.log, kv: S.kv };
+  download('food-log-backup-' + F.ymd(new Date()) + '.json', new Blob([JSON.stringify(data)], { type: 'application/json' }));
+  try { await kvSet('lastBackup', Date.now()); render(); } catch (e) { fail(e); }
+}
+async function restoreBackup(file) {
+  try {
+    const d = JSON.parse(await file.text());
+    if (d.app !== 'kitchen-food-log' || !Array.isArray(d.log) || !Array.isArray(d.foods) || !Array.isArray(d.recipes)) throw new Error('this is not a food log backup');
+    const ops = STORES.map(s => [s, 'clear']);
+    for (const s of ['foods', 'recipes', 'log']) for (const row of d[s]) ops.push([s, 'put', row]);
+    for (const key of Object.keys(d.kv || {})) ops.push(['kv', 'put', { key, value: d.kv[key] }]);
+    await dbWrite(ops); await loadAll(); render(); toast('Restored ' + d.log.length + ' entries');
+  } catch (e) { toast('Not restored: ' + (e.message || e)); }
+}
+
+/* ===================== start ===================== */
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { S.view = b.dataset.view; if (S.view === 'today') S.date = F.ymd(new Date()); render(); window.scrollTo(0, 0); });
+$('#fab').onclick = () => openAdd(null);
+(async function start() {
+  try {
+    for (const f of CNF.foods) S.cnf.set(f[0], f);
+    S.cnfIndex = CNF.foods.map(f => F.indexItem({ ref: { t: 'c', id: f[0] }, name: f[1], alt: f[2], group: f[3] }));
+    db = await dbOpen(); await loadAll();
+    if (!S.kv.firstOpen) await kvSet('firstOpen', Date.now());
+    S.persisted = !!(navigator.storage && navigator.storage.persist && await navigator.storage.persist());
+    render();
+    if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+    const since = Date.now() - (S.kv.lastBackup || S.kv.firstOpen);
+    if (S.log.length > 20 && since > 14 * 864e5) toast('No backup in two weeks. More > Save a backup file.');
+  } catch (e) { $('#main').innerHTML = '<div class="note">The app could not open its storage on this phone (' + h(e && e.message || e) + '). Private browsing blocks it: open the page in a normal Chrome tab.</div>'; }
+})();
+</script>
+</body>
+</html>
