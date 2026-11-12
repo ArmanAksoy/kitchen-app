@@ -12,7 +12,7 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, acceptDownloads: true });
   const page = await ctx.newPage(); const errors = [];
-  page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
+  page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/Estimating resolution|Detected \d+ diacritics/.test(m.text())) errors.push(m.text()); });   // the reader's own chatter is not an error
   const shot = async n => { if (shots) await page.screenshot({ path: path.join(shots, n + '.png'), fullPage: false }); };
   const ok = async sel => { await page.click(sel || '#ok'); await page.waitForSelector('#sheetbg.on', { state: 'detached' }); };
   let n = 0; const step = async (name, fn) => { await fn(); n++; console.log('  ok ' + name); };
@@ -35,7 +35,7 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
   await step('label photo is read on the device and saved as a food', async () => {
     await page.click('#fab'); await page.click('#hand');
     await page.setInputFiles('#file', path.join(__dirname, 'label-sample.jpg'));
-    await page.waitForFunction(() => /Read \d+ of|No numbers|Could not/.test(document.querySelector('#ocr').textContent), null, { timeout: 120000 });
+    await page.waitForFunction(() => /Read \d+ of|No numbers|stopped/.test(document.querySelector('#ocr').textContent), null, { timeout: 120000 });
     console.log('     ' + await page.textContent('#ocr'));
     const got = {}; for (const k of ['kcal', 'fat', 'satfat', 'carbs', 'sugars', 'protein', 'sodium', 'calcium']) got[k] = await page.inputValue('#v_' + k);
     console.log('     ' + JSON.stringify(got) + ' serving ' + await page.inputValue('#serv'));

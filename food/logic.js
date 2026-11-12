@@ -49,6 +49,8 @@ const F = (() => {
   /* What a Canadian Nutrition Facts table can give us. */
   const LABEL_KEYS = ['kcal', 'fat', 'satfat', 'transfat', 'carbs', 'fibre', 'sugars', 'protein',
     'chol', 'sodium', 'potassium', 'calcium', 'iron'];
+  /* Printed only on "Supplemented Food Facts" tables (energy drinks, fortified foods). */
+  const EXTRA_LABEL_KEYS = ['niacin', 'pantothenic', 'b6', 'b12', 'caffeine'];
 
   /* ---------- text ---------- */
   function norm(s) {
@@ -196,17 +198,18 @@ const F = (() => {
     ['fibre', /\bfib(?:re|er)s?\b/g], ['sugars', /\bsugars?\b|\bsucres?\b/g],
     ['protein', /protein\w*/g], ['chol', /cholest\w*/g], ['sodium', /\bsodium\b/g],
     ['potassium', /\bpotassium\b/g], ['calcium', /\bcalcium\b/g], ['iron', /\biron\b|\bfer\b/g],
-    ['kcal', /\bcalories\b/g]
+    ['kcal', /\bcalories\b/g],
+    ['niacin', /\bniacine?\b/g], ['pantothenic', /pantoth\w*/g], ['b6', /\bb\s?6\b/g], ['b12', /\bb\s?12\b/g],
+    ['caffeine', /\bcaff?eine\b/g]
   ];
-  const MG_KEYS = new Set(['chol', 'sodium', 'potassium', 'calcium', 'iron']);
+  const MG_KEYS = new Set(['chol', 'sodium', 'potassium', 'calcium', 'iron', 'niacin', 'pantothenic', 'b6', 'caffeine']);
+  const UG_KEYS = new Set(['b12']);          /* printed in µg, which text readers render as ug, pg, vo... */
 
-  /* text: what the text reader saw on a Nutrition Facts table (English, French or both).
-     Returns { serving, unit, servingLabel, vals (per serving), per100 (null until a serving
-     size is known), found, warnings }. Never throws: unread fields are simply absent. */
-  function parseLabel(text) {
+  /* One reading of the table -> { serving, unit, servingLabel, vals } (vals are per serving). */
+  function readLabelText(text) {
     let t = String(text || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     t = t.replace(/\bo\s?(m?g)\b/g, '0 $1').replace(/(\d)\s?[,]\s?(\d)/g, '$1.$2').replace(/[|]/g, ' ');
-    const res = { serving: null, unit: 'g', servingLabel: '', vals: {}, per100: null, found: 0, warnings: [] };
+    const res = { serving: null, unit: 'g', servingLabel: '', vals: {} };
 
     let m = t.match(/(?:per|pour|par)\s+([^\n(]{0,40}?)\(\s*(\d+(?:\.\d+)?)\s*(g|ml)\s*\)/);
     if (m) { res.servingLabel = m[1].trim(); res.serving = num(m[2]); res.unit = m[3]; }
@@ -227,15 +230,35 @@ const F = (() => {
       let stop = Math.min(t.length, h.end + 45);
       for (let j = i + 1; j < hits.length; j++) if (hits[j].start >= h.end) { stop = Math.min(stop, hits[j].start); break; }
       const seg = t.slice(h.end, stop).split('\n')[0];
-      const wantMg = MG_KEYS.has(h.key);
+      const wantMg = MG_KEYS.has(h.key), wantUg = UG_KEYS.has(h.key);
       const re = /(\d+(?:\.\d+)?)\s*(mg|g|%)?/g; let n;
       while ((n = re.exec(seg))) {
         if (h.key === 'kcal') { res.vals.kcal = num(n[1]); break; }   // "Calories 130   % Daily Value" is one printed line
         if (n[2] === '%') continue;                                  // a % daily value, not an amount
         if (wantMg && n[2] !== 'mg') continue;                       // "Calcium 2 %" style: no amount
         if (!wantMg && n[2] === 'mg') continue;
+        if (wantUg && n[2] === 'g') continue;
         if (!n[2] && /^\s*%/.test(seg.slice(re.lastIndex))) continue;
         res.vals[h.key] = num(n[1]); break;
+      }
+    }
+    return res;
+  }
+
+  /* text: what the text reader saw on a Nutrition Facts table (English, French or both), or an
+     array of several readings of the same photo. Readings are merged: the first one that has a
+     value wins, and a value two readings disagree on is listed in `warnings` under its key.
+     Returns { serving, unit, servingLabel, vals (per serving), per100 (null until a serving
+     size is known), found, warnings }. Never throws: unread fields are simply absent. */
+  function parseLabel(text) {
+    const reads = (Array.isArray(text) ? text : [text]).map(readLabelText);
+    const res = { serving: null, unit: 'g', servingLabel: '', vals: {}, per100: null, found: 0, warnings: [] };
+    for (const r of reads) {
+      if (!res.serving && r.serving) { res.serving = r.serving; res.unit = r.unit; res.servingLabel = r.servingLabel; }
+      else if (res.serving && r.serving && r.serving !== res.serving && !res.warnings.includes('servingsize')) res.warnings.push('servingsize');
+      for (const k of Object.keys(r.vals)) {
+        if (res.vals[k] === undefined) res.vals[k] = r.vals[k];
+        else if (res.vals[k] !== r.vals[k] && !res.warnings.includes(k)) res.warnings.push(k);
       }
     }
     res.found = Object.keys(res.vals).length;
@@ -245,8 +268,8 @@ const F = (() => {
       const est = 4 * v.protein + 4 * v.carbs + 9 * v.fat;
       if (Math.abs(est - v.kcal) > Math.max(25, 0.25 * v.kcal)) res.warnings.push('energy');
     }
-    if (v.satfat !== undefined && v.fat !== undefined && v.satfat > v.fat + 0.5) res.warnings.push('satfat');
-    if (v.sugars !== undefined && v.carbs !== undefined && v.sugars > v.carbs + 0.5) res.warnings.push('sugars');
+    if (v.satfat !== undefined && v.fat !== undefined && v.satfat > v.fat + 0.5 && !res.warnings.includes('satfat')) res.warnings.push('satfat');
+    if (v.sugars !== undefined && v.carbs !== undefined && v.sugars > v.carbs + 0.5 && !res.warnings.includes('sugars')) res.warnings.push('sugars');
     if (!res.serving) res.warnings.push('serving');
     if (res.serving) res.per100 = servingToPer100(res.vals, res.serving);
     return res;
@@ -339,7 +362,7 @@ const F = (() => {
     return out;
   }
 
-  return { NUTRIENTS, KEYS, LABEL_KEYS, norm, parseQuick, indexItem, search, scale, sum, recipePer100, round,
+  return { NUTRIENTS, KEYS, LABEL_KEYS, EXTRA_LABEL_KEYS, norm, parseQuick, indexItem, search, scale, sum, recipePer100, round,
     parseLabel, servingToPer100, ymd, addDays, logTable, dayTable, xlsx };
 })();
 if (typeof module !== 'undefined') module.exports = F;

@@ -81,7 +81,7 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 /* ===================== Food log: storage and screen =====================
    All arithmetic and parsing is in logic.js (global F). The food database is cnf.js (global CNF).
    Everything the user enters stays on this device, in IndexedDB. See ../FOOD.md. */
-const VERSION = '1.0.1';
+const VERSION = '1.0.2';
 const $ = s => document.querySelector(s);
 const h = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
@@ -327,6 +327,10 @@ function renderFoods() {
 /* ---------- packaged food: label photo or by hand ---------- */
 const LABEL_FIELDS = [['kcal', 'Calories', 'kcal'], ['fat', 'Fat', 'g'], ['satfat', 'Saturated', 'g'], ['transfat', 'Trans', 'g'], ['carbs', 'Carbohydrate', 'g'], ['fibre', 'Fibre', 'g'],
   ['sugars', 'Sugars', 'g'], ['protein', 'Protein', 'g'], ['chol', 'Cholesterol', 'mg'], ['sodium', 'Sodium', 'mg'], ['potassium', 'Potassium', 'mg'], ['calcium', 'Calcium', 'mg'], ['iron', 'Iron', 'mg']];
+/* Only on "Supplemented Food Facts" tables. Shown in a folded section that opens when one is read. */
+const EXTRA_FIELDS = [['niacin', 'Niacin', 'mg'], ['pantothenic', 'Pantothenic acid', 'mg'], ['b6', 'Vitamin B6', 'mg'], ['b12', 'Vitamin B12', 'µg'], ['caffeine', 'Caffeine', 'mg']];
+const ALL_FIELDS = LABEL_FIELDS.concat(EXTRA_FIELDS);
+const fieldBox = ([k, n, u], f) => '<div id="box_' + k + '"><label>' + n + ' (' + u + ')</label><input id="v_' + k + '" type="number" inputmode="decimal" step="any" value="' + (f && f.vals[k] !== undefined && f.vals[k] !== null ? f.vals[k] : '') + '"></div>';
 function openFoodForm(id, scanNow, name) {
   const f = id ? S.foods.find(x => x.id === id) : null;
   openOver('<div class="top"><button id="back" aria-label="Back">&#8249;</button><h1>' + (f ? 'Edit food' : 'New packaged food') + '</h1><span style="width:44px"></span></div>' +
@@ -336,7 +340,8 @@ function openFoodForm(id, scanNow, name) {
     '<div class="grid2"><div id="servBox"><label>Serving size</label><input id="serv" type="number" inputmode="decimal" step="any" value="' + (f ? f.serving : '') + '"></div>' +
     '<div><label>in</label><select id="sunit"><option' + (f && f.unit === 'ml' ? '' : ' selected') + '>g</option><option' + (f && f.unit === 'ml' ? ' selected' : '') + '>ml</option></select></div></div>' +
     '<label>Serving is called (optional)</label><input id="slabel" placeholder="2 cookies, 1 cup, 1 bar..." value="' + h(f ? f.servingLabel || '' : '') + '">' +
-    '<h2>Per serving, as printed</h2><div class="card"><div class="grid2">' + LABEL_FIELDS.map(([k, n, u]) => '<div id="box_' + k + '"><label>' + n + ' (' + u + ')</label><input id="v_' + k + '" type="number" inputmode="decimal" step="any" value="' + (f && f.vals[k] !== undefined && f.vals[k] !== null ? f.vals[k] : '') + '"></div>').join('') + '</div></div>' +
+    '<h2>Per serving, as printed</h2><div class="card"><div class="grid2">' + LABEL_FIELDS.map(x => fieldBox(x, f)).join('') + '</div>' +
+    '<details id="extra" style="margin-top:12px"' + (f && EXTRA_FIELDS.some(([k]) => f.vals[k] !== undefined) ? ' open' : '') + '><summary class="dim small">Added vitamins and caffeine (energy drinks, fortified foods)</summary><div class="grid2">' + EXTRA_FIELDS.map(x => fieldBox(x, f)).join('') + '</div></details></div>' +
     '<div class="row">' + (f ? '<button class="danger" id="fdel">Delete</button>' : '') + '<button class="primary grow" id="fsave">Save</button></div>');
   $('#back').onclick = closeOver;
   $('#shoot').onclick = () => $('#file').click();
@@ -349,23 +354,41 @@ let ocrWorker = null;
 async function readLabel(file) {
   const status = m => { if ($('#ocr')) $('#ocr').textContent = m; };
   try {
-    status('Reading the label on this phone...');
-    const canvas = await shrink(file, 1800);
+    status('Preparing the photo...');
+    const canvas = await shrink(file, 2000);
     if (!ocrWorker) {
+      status('Loading the reader (about 8 MB, the first time only)...');
       await loadScript('vendor/tesseract.min.js');
       const at = p => new URL(p, location.href).href;
       ocrWorker = await Tesseract.createWorker(['eng', 'fra'], 1, { workerPath: at('vendor/worker.min.js'), corePath: at('vendor/'), langPath: at('vendor/lang/'), gzip: true });
     }
-    const out = await ocrWorker.recognize(canvas);
-    fillLabel(F.parseLabel(out.data.text));
-  } catch (e) { console.error(e); status('Could not read this photo (' + (e && e.message || e) + '). Type the numbers, or try another photo.'); }
+    /* Two readings of the same photo, merged by F.parseLabel. Mode 11 (scattered text) copes with a
+       curved or glossy label where the columns drift apart; mode 3 (page layout) is better on flat ones. */
+    const texts = [];
+    for (const mode of ['11', '3']) {
+      status('Reading the label on this phone (' + (texts.length + 1) + ' of 2)...');
+      await ocrWorker.setParameters({ tessedit_pageseg_mode: mode });
+      texts.push((await ocrWorker.recognize(canvas)).data.text);
+    }
+    S.lastRead = texts;                        /* kept in memory only, shown by "What the reader saw" */
+    fillLabel(F.parseLabel(texts));
+  } catch (e) { console.error(e); ocrWorker = null; status('The reader stopped: ' + (e && e.message || e) + '. Type the numbers, or try another photo.'); }
 }
 function fillLabel(r) {
-  for (const [k] of LABEL_FIELDS) { $('#v_' + k).value = r.vals[k] !== undefined ? r.vals[k] : ''; $('#box_' + k).classList.toggle('flag', r.vals[k] === undefined || (r.warnings.includes('energy') && ['kcal', 'fat', 'carbs', 'protein'].includes(k)) || r.warnings.includes(k)); }
+  for (const [k] of ALL_FIELDS) {
+    const extra = F.EXTRA_LABEL_KEYS.includes(k);
+    $('#v_' + k).value = r.vals[k] !== undefined ? r.vals[k] : '';
+    $('#box_' + k).classList.toggle('flag', (!extra && r.vals[k] === undefined) || (r.warnings.includes('energy') && ['kcal', 'fat', 'carbs', 'protein'].includes(k)) || r.warnings.includes(k));
+  }
+  if (EXTRA_FIELDS.some(([k]) => r.vals[k] !== undefined)) $('#extra').open = true;
   if (r.serving) { $('#serv').value = r.serving; $('#sunit').value = r.unit; }
-  $('#servBox').classList.toggle('flag', !r.serving);
+  $('#servBox').classList.toggle('flag', !r.serving || r.warnings.includes('servingsize'));
   if (r.servingLabel && !$('#slabel').value) $('#slabel').value = r.servingLabel;
-  $('#ocr').textContent = r.found ? 'Read ' + r.found + ' of ' + LABEL_FIELDS.length + ' values. Boxes outlined in yellow were not read or look off: compare them with the package.' : 'No numbers found in this photo. Fill the table well in the frame, flat and without glare, or type the values.';
+  const main = LABEL_FIELDS.filter(([k]) => r.vals[k] !== undefined).length;
+  $('#ocr').innerHTML = (r.found ? 'Read ' + main + ' of the ' + LABEL_FIELDS.length + ' usual values' + (r.found > main ? ', plus ' + (r.found - main) + ' added ones' : '') + '. Boxes outlined in yellow were not read or look off: compare them with the package (many labels simply do not print them all).'
+    : 'No numbers found in this photo. Fill the frame with the table, hold it straight, avoid glare, or type the values.') +
+    ' <button class="link" id="saw" style="padding:0">What the reader saw</button>';
+  $('#saw').onclick = () => openSheet('<h1>What the reader saw</h1><div class="small dim" style="margin:6px 0">If a label reads badly, a screenshot of this helps to fix it.</div><pre style="white-space:pre-wrap;font-size:12px;max-height:60vh;overflow:auto">' + h((S.lastRead || []).join('\n\n--------\n\n')) + '</pre><button id="sawOk" style="width:100%">Close</button>') || ($('#sawOk').onclick = closeSheet);
   const w = [];
   if (r.warnings.includes('energy')) w.push('The calories do not match the fat, carbohydrate and protein read. One of those four is probably misread.');
   if (r.warnings.includes('serving')) w.push('The serving size was not read. Type it: it is on the first line of the table ("Per ...").');
@@ -375,14 +398,18 @@ function shrink(file, max) {
   return new Promise((res, rej) => {
     const img = new Image(), url = URL.createObjectURL(file);
     img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)); const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); res(c); };       /* the photo itself is never stored */
+      const ctx = c.getContext('2d'); ctx.drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);     /* the photo itself is never stored */
+      /* Grey levels only: colour reflections on cans and glossy bags confuse the reader. */
+      const px = ctx.getImageData(0, 0, c.width, c.height), d = px.data;
+      for (let i = 0; i < d.length; i += 4) d[i] = d[i + 1] = d[i + 2] = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
+      ctx.putImageData(px, 0, 0); res(c); };
     img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('not an image')); }; img.src = url;
   });
 }
 function loadScript(src) { return new Promise((res, rej) => { if (window.Tesseract) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('text reader not loaded')); document.head.appendChild(s); }); }
 async function saveFood(existing) {
   const name = $('#fname').value.trim(), serving = parseFloat($('#serv').value), vals = {};
-  for (const [k] of LABEL_FIELDS) { const v = $('#v_' + k).value; if (v !== '') vals[k] = parseFloat(v); }
+  for (const [k] of ALL_FIELDS) { const v = $('#v_' + k).value; if (v !== '') vals[k] = parseFloat(v); }
   if (!name) return toast('Give it a name');
   if (!(serving > 0)) return toast('Enter the serving size');
   if (vals.kcal === undefined) return toast('Calories are needed at least');
@@ -501,10 +528,11 @@ function renderMore() {
 }
 function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
 function exportXlsx() {
-  const head = ['name', 'unit', 'serving', 'serving_name'].concat(F.LABEL_KEYS.map(k => k + '_per_serving'));
+  const labelKeys = F.LABEL_KEYS.concat(F.EXTRA_LABEL_KEYS);
+  const head = ['name', 'unit', 'serving', 'serving_name'].concat(labelKeys.map(k => k + '_per_serving'));
   const sheets = [{ name: 'Log', rows: F.logTable(S.log) }, { name: 'Days', rows: F.dayTable(S.log) },
     { name: 'Recipes', rows: [['recipe', 'batch_weight_g', 'portion_g', 'ingredient', 'amount', 'unit', 'kcal_per_100g', 'protein_per_100g']].concat(S.recipes.flatMap(r => r.items.map(it => [r.name, r.weight, r.portion_g || '', it.name, it.amount, it.unit, Math.round(r.per100.kcal * 10) / 10, Math.round((r.per100.protein || 0) * 10) / 10]))) },
-    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || ''].concat(F.LABEL_KEYS.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
+    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || ''].concat(labelKeys.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
   download('food-log-' + F.ymd(new Date()) + '.xlsx', new Blob([F.xlsx(sheets)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }
 async function saveBackup() {

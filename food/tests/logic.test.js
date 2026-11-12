@@ -86,6 +86,19 @@ t('US style and warnings', () => {
   assert.ok(r.warnings.includes('energy') && r.warnings.includes('serving')); assert.strictEqual(r.per100, null);
   assert.strictEqual(F.parseLabel('').found, 0);
 });
+// What the reader really returned for a photo of a Red Bull can (curved, glossy, held in a hand), two passes.
+const RB1 = `| ; supplemented Food Fag:\ninfo-aliment supplémen;, 4\n| per 1 can (250 mL)\n\npour | canette (250 mL) i\n\ncalories 110 % DV Av M\n\n,|rat/Lipides 0 9 by\neR. ml\n\ncarbohydrate / Glucides 27 g =|\n\nSugars / Sucres 27 g 2 lin)\n\nProtein / Protéines 0 5 —| 8\n\n= | Sodium 105 mg TT em\nCalc 208 2% | kes\n\nÀ de pante ctl 5mg 100% "\nmin B127 Vitamine B12 5 vo "°° ;`;
+const RB2 = `Per 1 can (250 mL)\nCalories 110\n% DV* / % VQ*\nFat / Lipides 0 g\n0 %\nCarbohydrate / Glucides 27 g\nSugars / Sucres 27 g\n27 %\nProtein / Protéines 0 g\nSodium 105 mg\n4 %\nCalcium 30 mg\n2 %\nNiacin / Niacine 20 mg\n125 %\nPantothenic acid /\nAcide pantothénique 5 mg\n100 %\nVitamin B6 / Vitamine B6 5 mg\n294 %\nVitamin B12 / Vitamine B12 5 pg\n208 %\nCaffeine / Caféine 80 mg\nTaurine 1000 mg`;
+t('real can photo: two readings are merged, supplemented vitamins and caffeine are read', () => {
+  const one = F.parseLabel(RB1);
+  assert.deepStrictEqual(one.vals, { kcal: 110, fat: 0, carbs: 27, sugars: 27, protein: 0, sodium: 105, b12: 5 });
+  const r = F.parseLabel([RB1, RB2]);
+  assert.deepStrictEqual(r.vals, { kcal: 110, fat: 0, carbs: 27, sugars: 27, protein: 0, sodium: 105, b12: 5, calcium: 30, niacin: 20, pantothenic: 5, b6: 5, caffeine: 80 });
+  assert.strictEqual(r.serving, 250); assert.strictEqual(r.unit, 'ml'); assert.deepStrictEqual(r.warnings, []);
+  assert.strictEqual(r.per100.caffeine, 32);
+  const clash = F.parseLabel(['Calories 110\nSodium 105 mg', 'Calories 110\nSodium 185 mg']);
+  assert.strictEqual(clash.vals.sodium, 105); assert.ok(clash.warnings.includes('sodium'));
+});
 t('spreadsheet file', () => {
   const log = [{ date: '2026-11-11', time: '08:10', name: 'Banana, raw', amount: 130, unit: 'g', source: 'cnf', nut: F.scale(per100(1704), 130) },
                { date: '2026-11-11', time: '12:00', name: 'Biscuits "é" <x>', amount: 30, unit: 'g', source: 'label', nut: F.scale({ kcal: 467 }, 30) }];
