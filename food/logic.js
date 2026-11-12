@@ -108,7 +108,7 @@ const F = (() => {
     1749: 'strawberry fraise', 1705: 'blueberry bleuet', 3081: 'tuna thon can', 4049: 'tortilla flour',
     4523: 'rice white cooked riz', 4466: 'pasta spaghetti macaroni cooked pates', 4489: 'bulgur cooked boulgour',
     4414: 'bulgur dry boulgour',
-    6236: 'double whopper burger king hamburger', 6237: 'whopper burger king hamburger', 4664: 'fries french fries frites fast food',
+    6236: 'double whopper burger king hamburger', 6433: 'whopper burger king hamburger', 4664: 'fries french fries frites fast food',
     2926: 'diet coke coca cola zero pepsi soda', 5288: 'coke coca cola pepsi soda'
   };
   /* item: { ref:{t,id}, name, alt, group }  ->  adds the precomputed word lists */
