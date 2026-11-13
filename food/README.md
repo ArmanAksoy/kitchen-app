@@ -20,7 +20,12 @@ This folder is independent from the receipts app at the root of the repo. The tw
 - **Packaged food**: **Add food > Scan a label**, photograph the Nutrition Facts table flat and without glare, type the product name, **Save**. Boxes outlined in yellow were not read or look wrong: compare those with the package. This is done once per product.
 - **Batch cooking**: **My foods > New recipe**. Add each ingredient with its raw weight, then the cooked weight of the whole batch and the weight of one portion. After that, logging a portion is one tap.
 
-Anything logged before is under **Recent** with a **+** that adds the same amount again.
+When nothing is typed, the Add screen shows three lists (since 1.1.0):
+- **Favourites**: whatever you starred. Tap the star on any line, or on the amount screen.
+- **Mine**: every recipe and packaged food you created, by name, so you never have to remember what it was called.
+- **Recent**: the last things you logged.
+
+On every line, **+** adds it straight away with the amount you used last time (or one portion), and tapping the name lets you change the amount first.
 
 ### Good to know
 - Restaurant dishes are only there if Health Canada lists them (poutine, pad thai, sushi, donair, hamburgers, pizza). Shawarma, for example, is not. Use the closest thing, or **Add by hand** once with numbers from the restaurant.
@@ -57,7 +62,7 @@ Read this before changing anything, together with `../CLAUDE.md` for who the own
 - `log`: one row per thing eaten. `date`, `time`, `name`, `ref`, `amount` and `unit` (g or ml, always the real unit), `qty` and `measure` when it was entered as "2 x 1 large egg", `source`, and `nut`: the nutrients of that entry, frozen at the time of logging.
 - `foods`: packaged foods. `vals` is what was printed per serving, with `serving`, `unit`, and `per100` derived from them.
 - `recipes`: `items` (ref, name, amount, unit), `batch_g` (cooked weight, may be empty), `portion_g`, the `weight` used, and `per100` of the finished dish.
-- `kv`: `targets`, `uses` and `last` (drive search ranking and the Recent list), `firstOpen`, `lastBackup`.
+- `kv`: `targets`, `uses` and `last` (drive search ranking and the Recent list), `favs` (starred refs as `t:id` strings, in the order starred), `firstOpen`, `lastBackup`.
 
 A ref is `{t, id}`: `c` = database food code, `u` = packaged food, `r` = recipe.
 

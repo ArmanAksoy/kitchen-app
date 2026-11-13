@@ -37,7 +37,9 @@ h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim)
 .list{list-style:none;margin:0;padding:0}
 .list li{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line);cursor:pointer}
 .list li:last-child{border-bottom:0}
-.list .plus{flex:none;width:40px;height:40px;padding:0;border-radius:50%;font-size:22px;color:var(--acc)}
+.list .plus,.plus.star{flex:none;width:40px;height:40px;padding:0;border-radius:50%;font-size:22px;color:var(--acc)}
+.plus.star{color:var(--dim);border-color:transparent;background:none}
+.plus.star.on{color:var(--warn)}
 .tag{font-size:11px;border:1px solid var(--line);border-radius:6px;padding:1px 6px;color:var(--dim);margin-left:6px;white-space:nowrap}
 .nut{display:grid;grid-template-columns:1fr auto 44px;gap:2px 10px;align-items:center;padding:7px 0}
 .nut .bar{grid-column:1/-1;height:5px;margin-top:2px}
@@ -56,7 +58,7 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 .note{background:#2a2416;border:1px solid #57481f;color:#f0d9a0;border-radius:12px;padding:10px 12px;font-size:14px;margin:10px 0}
 #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(140px + env(safe-area-inset-bottom));background:#e9edf1;color:#14181d;padding:10px 16px;border-radius:20px;z-index:50;display:none;max-width:90vw;font-size:14px}
 .seg{display:flex;background:#11151a;border-radius:12px;padding:3px;margin-bottom:12px}
-.seg button{flex:1;border:0;background:none;padding:9px;border-radius:10px;color:var(--dim)}
+.seg button{flex:1;border:0;background:none;padding:9px 4px;border-radius:10px;color:var(--dim);font-size:14px;white-space:nowrap}
 .seg button.on{background:var(--card);color:var(--text)}
 .ing{display:grid;grid-template-columns:1fr 92px 36px;gap:8px;align-items:center;padding:6px 0}
 .ing button{padding:6px 0}
@@ -81,7 +83,7 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 /* ===================== Food log: storage and screen =====================
    All arithmetic and parsing is in logic.js (global F). The food database is cnf.js (global CNF).
    Everything the user enters stays on this device, in IndexedDB. See ../FOOD.md. */
-const VERSION = '1.0.3';
+const VERSION = '1.1.0';
 const $ = s => document.querySelector(s);
 const h = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
@@ -210,7 +212,7 @@ function amountText(e) {
 /* pick: null to log to the diary, or a function(ref, food, parsed) used by the recipe editor */
 let picker = null;
 function openAdd(pick) {
-  picker = pick || null;
+  picker = pick || null; S.addTab = null;
   openOver('<div class="row" style="margin-bottom:10px"><button id="back" aria-label="Back">&#8249;</button><input id="q" placeholder="130 g banana, 2 eggs, poutine..." autocomplete="off" autocapitalize="off" enterkeyhint="search"></div><div id="results"></div>');
   $('#back').onclick = closeOver;
   $('#q').oninput = renderResults;
@@ -219,17 +221,26 @@ function openAdd(pick) {
 function renderResults() {
   const text = $('#q').value, parsed = F.parseQuick(text), box = $('#results');
   if (!parsed.query) {
-    const last = S.kv.last || {};
-    const recent = Object.keys(last).map(k => ({ k, v: last[k] })).sort((a, b) => b.v.at - a.v.at).slice(0, 25)
-      .map(x => { const [t, id] = [x.k[0], x.k.slice(2)]; const ref = { t, id: t === 'c' ? Number(id) : id }; return { ref, food: resolve(ref), v: x.v }; }).filter(x => x.food);
+    /* Nothing typed: three lists to pick from without remembering a name. */
+    const favs = favList(), mine = mineList(), recent = recentList();
+    if (!S.addTab) S.addTab = favs.length ? 'fav' : recent.length ? 'recent' : mine.length ? 'mine' : 'recent';
+    const list = { fav: favs, mine, recent }[S.addTab];
+    const empty = { fav: 'No favourite yet. Tap the star next to anything in the other two lists, or on the amount screen.',
+      mine: 'Your recipes and the packaged foods you scanned or entered will be listed here.',
+      recent: 'What you log will show up here, one tap to add it again.' }[S.addTab];
     let html = picker ? '' : '<div class="grid2" style="margin-bottom:12px"><button id="scan">Scan a label</button><button id="hand">Add by hand</button></div>';
-    html += '<h2>Recent</h2><div class="card">' + (recent.length ? '<ul class="list">' + recent.map((x, i) =>
-      '<li data-i="' + i + '"><div class="grow"><div class="ell">' + h(x.food.name) + '</div><div class="small dim">' + h(amountText(x.v)) + '</div></div>' + (picker ? '' : '<button class="plus" data-again="' + i + '" aria-label="Add again">+</button>') + '</li>').join('') + '</ul>'
-      : '<div class="dim">What you log will show up here, one tap to add it again.</div>') + '</div>';
+    html += '<div class="seg">' + [['fav', '\u2605 Favourites', favs], ['mine', 'Mine', mine], ['recent', 'Recent', recent]].map(([k, n, l]) =>
+      '<button data-addtab="' + k + '" class="' + (S.addTab === k ? 'on' : '') + '">' + n + ' (' + l.length + ')</button>').join('') + '</div>';
+    html += '<div class="card">' + (list.length ? '<ul class="list">' + list.map((x, i) =>
+      '<li data-i="' + i + '"><div class="grow"><div class="ell">' + h(x.food.name) + '</div><div class="small dim ell">' + (x.ref.t === 'r' ? 'Recipe · ' : x.ref.t === 'u' ? 'Packaged · ' : '') + h(amountText(x.v)) + ' · ' + Math.round(F.scale(x.food.per100, x.v.amount).kcal || 0) + ' kcal</div></div>' +
+      (picker ? '' : '<button class="plus star' + (isFav(x.ref) ? ' on' : '') + '" data-star="' + i + '" aria-label="Favourite">' + (isFav(x.ref) ? '\u2605' : '\u2606') + '</button><button class="plus" data-again="' + i + '" aria-label="Add again">+</button>') + '</li>').join('') + '</ul>'
+      : '<div class="dim">' + empty + '</div>') + '</div>';
     box.innerHTML = html;
     if (!picker) { $('#scan').onclick = () => openFoodForm(null, true); $('#hand').onclick = () => openFoodForm(null, false); }
-    box.querySelectorAll('li').forEach(li => li.onclick = ev => {
-      const x = recent[li.dataset.i];
+    box.querySelectorAll('[data-addtab]').forEach(b => b.onclick = () => { S.addTab = b.dataset.addtab; renderResults(); });
+    box.querySelectorAll('li').forEach(li => li.onclick = async ev => {
+      const x = list[li.dataset.i];
+      if (ev.target.dataset.star !== undefined) { await toggleFav(x.ref); return renderResults(); }
       if (ev.target.dataset.again !== undefined) return addEntry(x.ref, x.food, x.v.amount, x.v.qty, x.v.measure);
       choose(x.ref, x.food, x.v.measure ? { count: x.v.qty, measure: x.v.measure } : { amount: x.v.amount });
     });
@@ -242,6 +253,29 @@ function renderResults() {
     : '<div class="card dim">Nothing found for "' + h(parsed.query) + '". Try another word (English or French), or use Add by hand to enter it once with the numbers you have.</div>' + (picker ? '' : '<button id="hand2">Add by hand</button>');
   box.querySelectorAll('li').forEach(li => li.onclick = () => { const it = found[li.dataset.i]; choose(it.ref, resolve(it.ref), parsed); });
   if ($('#hand2')) $('#hand2').onclick = () => openFoodForm(null, false, parsed.query);
+}
+/* ---- favourites, own items, recents: all as { ref, food, v } where v is the amount a quick tap would log ---- */
+const keyRef = k => ({ t: k[0], id: k[0] === 'c' ? Number(k.slice(2)) : k.slice(2) });
+const isFav = ref => (S.kv.favs || []).includes(refKey(ref));
+async function toggleFav(ref) {
+  const k = refKey(ref), favs = (S.kv.favs || []).filter(x => x !== k);
+  if (favs.length === (S.kv.favs || []).length) favs.push(k);
+  try { await kvSet('favs', favs); } catch (e) { fail(e); }
+}
+/* The amount one tap adds: what was logged last time, else one serving or piece, else 100 g. Never a guess above that. */
+function quickAmount(ref, food) {
+  const last = (S.kv.last || {})[refKey(ref)], ms = food.measures || [];
+  if (last && (!last.measure || ms.some(m => m[0] === last.measure))) return last;
+  const i = ref.t !== 'c' ? (ms.length ? 0 : -1) : ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]));
+  return i >= 0 ? { amount: ms[i][1], qty: 1, measure: ms[i][0], unit: food.unit } : { amount: 100, qty: 100, measure: null, unit: food.unit };
+}
+const withFood = ref => { const food = resolve(ref); return food ? { ref, food, v: quickAmount(ref, food) } : null; };
+const favList = () => (S.kv.favs || []).map(k => withFood(keyRef(k))).filter(Boolean);
+const mineList = () => S.recipes.map(r => ({ t: 'r', id: r.id })).concat(S.foods.map(f => ({ t: 'u', id: f.id }))).map(withFood).filter(Boolean)
+  .sort((a, b) => a.food.name.localeCompare(b.food.name));
+function recentList() {
+  const last = S.kv.last || {};
+  return Object.keys(last).sort((a, b) => last[b].at - last[a].at).slice(0, 30).map(k => withFood(keyRef(k))).filter(Boolean);
 }
 function choose(ref, food, parsed) {
   if (picker) { picker(ref, food, parsed); closeOver(); return; }
@@ -258,7 +292,7 @@ function amountSheet(ref, food, parsed, entry) {
   else if (parsed.count && ms.length) { mi = Math.max(0, ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]))); qty = parsed.count; }
   else if (ref.t !== 'c' && ms.length) { mi = 0; qty = 1; }     /* own food or recipe: one serving, never "100" */
   else qty = parsed.count || 100;
-  openSheet('<h1 style="margin-bottom:4px">' + h(food.name) + '</h1><div class="small dim" id="per"></div>' +
+  openSheet('<div class="row" style="margin-bottom:4px"><h1 class="grow">' + h(food.name) + '</h1>' + (resolve(ref) ? '<button class="plus star' + (isFav(ref) ? ' on' : '') + '" id="favBtn" aria-label="Favourite">' + (isFav(ref) ? '\u2605' : '\u2606') + '</button>' : '') + '</div><div class="small dim" id="per"></div>' +
     '<div class="grid2" style="margin-top:12px"><div><label>Amount</label><input id="amt" type="number" inputmode="decimal" step="any" min="0" value="' + qty + '"></div>' +
     '<div><label>Unit</label><select id="unit"><option value="-1">' + food.unit + '</option>' + ms.map((m, i) => '<option value="' + i + '"' + (i === mi ? ' selected' : '') + '>' + h(m[0]) + ' (' + m[1] + ' ' + food.unit + ')</option>').join('') + '</select></div></div>' +
     '<div class="card" style="margin:14px 0;background:#11151a" id="preview"></div><div id="warn"></div>' +
@@ -272,6 +306,7 @@ function amountSheet(ref, food, parsed, entry) {
     return { amount, qty: q, measure: i >= 0 ? ms[i][0] : null };
   };
   $('#amt').oninput = calc; $('#unit').onchange = calc; calc();
+  if ($('#favBtn')) $('#favBtn').onclick = async () => { await toggleFav(ref); const on = isFav(ref); $('#favBtn').textContent = on ? '\u2605' : '\u2606'; $('#favBtn').classList.toggle('on', on); toast(on ? 'Added to favourites' : 'Removed from favourites'); };
   $('#ok').onclick = async () => {
     const c = calc(); if (!(c.amount > 0)) return toast('Enter an amount above zero');
     if (entry) {

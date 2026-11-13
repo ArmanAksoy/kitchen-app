@@ -83,6 +83,22 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
     assert.strictEqual(await page.inputValue('#rname'), 'Linked recipe'); assert.strictEqual(await page.inputValue('[data-amt="1"]'), '350');
     await page.click('#back'); await page.click('nav [data-view=today]');
   });
+  await step('favourites and the list of own recipes and foods: found without remembering a name', async () => {
+    await page.click('#fab'); await page.click('[data-addtab=mine]');
+    const mine = (await page.textContent('#results .card')).toLowerCase();
+    for (const name of ['test mercimek', 'greek yogurt test', 'croissant test']) assert.ok(mine.includes(name), name + ' missing from Mine');
+    assert.match(await page.textContent('[data-addtab=fav]'), /\(0\)/);
+    await page.click('#results li:has-text("Test mercimek") [data-star]');
+    await page.waitForFunction(() => /\(1\)/.test(document.querySelector('[data-addtab=fav]').textContent));
+    await page.click('#back'); await page.click('#fab');                      // favourites now open first
+    assert.match(await page.textContent('#results .card'), /Test mercimek.*1 x 1 portion \(390 g\)/);
+    const before = await page.locator('[data-entry]').count();
+    await page.click('#results [data-again] >> nth=0'); await page.waitForSelector('#over.on', { state: 'detached' });
+    assert.strictEqual(await page.locator('[data-entry]').count(), before + 1);
+    await page.click('[data-entry] >> nth=0'); assert.ok(await page.locator('#favBtn').count() === 1);
+    await page.click('#sheetbg', { position: { x: 5, y: 5 } }); await page.waitForSelector('#sheetbg.on', { state: 'detached' });
+    await page.click('[data-entry]:has-text("Test mercimek") >> nth=0'); await ok('#del');
+  });
   let backup;
   await step('spreadsheet and backup files download; data survives a reload', async () => {
     await page.click('nav [data-view=more]'); await shot('6-more');
