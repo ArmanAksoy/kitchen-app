@@ -42,6 +42,11 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
     assert.strictEqual(got.kcal, '130'); assert.strictEqual(got.protein, '17'); assert.strictEqual(await page.inputValue('#serv'), '175');
     await page.fill('#fname', 'Greek yogurt test'); await shot('3-label'); await page.click('#fsave');
     await page.waitForSelector('#amt'); assert.strictEqual(await page.inputValue('#amt'), '1');     // one serving by default
+    await page.click('[data-frac="0.5"]'); assert.strictEqual(await page.inputValue('#amt'), '0.5'); assert.match(await page.textContent('#preview'), /\b65\b/);
+    await page.selectOption('#unit', '-1'); assert.strictEqual(await page.inputValue('#amt'), '87.5');    // switching to grams keeps what was eaten
+    assert.match(await page.textContent('#amtLabel'), /How much \(g\)/);
+    await page.fill('#amt', '200'); await page.selectOption('#unit', '0'); assert.strictEqual(await page.inputValue('#amt'), '1.14');
+    await page.fill('#amt', '1'); await shot('3b-quick');
     await ok(); assert.match(await page.textContent('#main'), /Greek yogurt test/);
     assert.match(await page.textContent('#main'), /come from a package label/);
   });
@@ -98,6 +103,16 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
     await page.click('[data-entry] >> nth=0'); assert.ok(await page.locator('#favBtn').count() === 1);
     await page.click('#sheetbg', { position: { x: 5, y: 5 } }); await page.waitForSelector('#sheetbg.on', { state: 'detached' });
     await page.click('[data-entry]:has-text("Test mercimek") >> nth=0'); await ok('#del');
+  });
+  await step('whole package: one tap logs the package, not the label serving', async () => {
+    await page.click('nav [data-view=foods]'); await page.click('[data-tab=foods]'); await page.click('[data-food]:has-text("Croissant test")');
+    await page.fill('#fpack', '525'); await page.click('#fsave'); await page.waitForSelector('#over.on', { state: 'detached' });
+    await page.click('nav [data-view=today]'); const before = await page.locator('[data-entry]').count();
+    await page.click('#fab'); await page.fill('#q', 'croissant test'); await page.click('#results li >> nth=0');
+    await page.click('#chips button:has-text("Whole package")'); assert.match(await page.textContent('#preview'), /2280/);
+    await ok(); assert.match(await page.textContent('#main'), /1 x whole package \(525 g\)/);
+    await page.click('[data-entry]:has-text("whole package")'); assert.match(await page.textContent('#unit option:checked'), /whole package/); await ok('#del');
+    assert.strictEqual(await page.locator('[data-entry]').count(), before);
   });
   let backup;
   await step('spreadsheet and backup files download; data survives a reload', async () => {

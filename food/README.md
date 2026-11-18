@@ -27,6 +27,9 @@ When nothing is typed, the Add screen shows three lists (since 1.1.0):
 
 On every line, **+** adds it straight away with the amount you used last time (or one portion), and tapping the name lets you change the amount first.
 
+### When you ate more or less than the label's serving (since 1.2.0)
+The amount screen asks **How many** and shows quick buttons: **½, 1, 1½, 2** servings, and **Whole package** when the package size is known. To log by weight, switch the unit to **g**: the number converts by itself (1 serving of 175 g becomes 175 g), so what you ate stays the same. For a packaged food, fill **Whole package** once on its form (My foods > Packaged > the food) and eating the whole thing becomes one tap.
+
 ### Good to know
 - Restaurant dishes are only there if Health Canada lists them (poutine, pad thai, sushi, donair, hamburgers, pizza). Shawarma, for example, is not. Use the closest thing, or **Add by hand** once with numbers from the restaurant.
 - A package label only carries calories, macros, sodium, potassium, calcium and iron. For days that include packaged food, the vitamin lines show "3 of 4 items": they are a minimum.
@@ -60,7 +63,7 @@ Read this before changing anything, together with `../CLAUDE.md` for who the own
 
 ### Data (IndexedDB database `foodlog`, on the device)
 - `log`: one row per thing eaten. `date`, `time`, `name`, `ref`, `amount` and `unit` (g or ml, always the real unit), `qty` and `measure` when it was entered as "2 x 1 large egg", `source`, and `nut`: the nutrients of that entry, frozen at the time of logging.
-- `foods`: packaged foods. `vals` is what was printed per serving, with `serving`, `unit`, and `per100` derived from them.
+- `foods`: packaged foods. `vals` is what was printed per serving, with `serving`, `unit`, and `per100` derived from them. `pack` (optional, same unit as `serving`) is the whole package; it adds a `whole package` measure.
 - `recipes`: `items` (ref, name, amount, unit), `batch_g` (cooked weight, may be empty), `portion_g`, the `weight` used, and `per100` of the finished dish.
 - `kv`: `targets`, `uses` and `last` (drive search ranking and the Recent list), `favs` (starred refs as `t:id` strings, in the order starred), `firstOpen`, `lastBackup`.
 

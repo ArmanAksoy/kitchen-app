@@ -62,6 +62,9 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 .seg button.on{background:var(--card);color:var(--text)}
 .ing{display:grid;grid-template-columns:1fr 92px 36px;gap:8px;align-items:center;padding:6px 0}
 .ing button{padding:6px 0}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+.chips button{padding:8px 14px;border-radius:18px;font-size:15px}
+.chips button.on{border-color:var(--acc);color:var(--acc)}
 </style>
 </head>
 <body>
@@ -83,7 +86,7 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 /* ===================== Food log: storage and screen =====================
    All arithmetic and parsing is in logic.js (global F). The food database is cnf.js (global CNF).
    Everything the user enters stays on this device, in IndexedDB. See ../FOOD.md. */
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const $ = s => document.querySelector(s);
 const h = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
@@ -138,7 +141,9 @@ function resolve(ref) {
   }
   if (ref.t === 'u') {
     const f = S.foods.find(x => x.id === ref.id); if (!f) return null;
-    return { name: f.name, unit: f.unit, per100: f.per100, measures: [[f.servingLabel || '1 serving', f.serving]], source: f.source };
+    const ms = [[f.servingLabel || '1 serving', f.serving]];
+    if (f.pack > 0 && f.pack !== f.serving) ms.push(['whole package', f.pack]);
+    return { name: f.name, unit: f.unit, per100: f.per100, measures: ms, source: f.source };
   }
   const r = S.recipes.find(x => x.id === ref.id); if (!r) return null;
   return { name: r.name, unit: 'g', per100: r.per100, measures: r.portion_g > 0 ? [['1 portion', r.portion_g]] : [], source: 'recipe' };
@@ -262,11 +267,15 @@ async function toggleFav(ref) {
   if (favs.length === (S.kv.favs || []).length) favs.push(k);
   try { await kvSet('favs', favs); } catch (e) { fail(e); }
 }
+/* The usual "one of it": first serving of an own food or recipe, else the first per-piece measure of a database food. -1 if none. */
+function servingIdx(ref, ms) {
+  return ref.t !== 'c' ? (ms.length ? 0 : -1) : ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]));
+}
 /* The amount one tap adds: what was logged last time, else one serving or piece, else 100 g. Never a guess above that. */
 function quickAmount(ref, food) {
   const last = (S.kv.last || {})[refKey(ref)], ms = food.measures || [];
   if (last && (!last.measure || ms.some(m => m[0] === last.measure))) return last;
-  const i = ref.t !== 'c' ? (ms.length ? 0 : -1) : ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]));
+  const i = servingIdx(ref, ms);
   return i >= 0 ? { amount: ms[i][1], qty: 1, measure: ms[i][0], unit: food.unit } : { amount: 100, qty: 100, measure: null, unit: food.unit };
 }
 const withFood = ref => { const food = resolve(ref); return food ? { ref, food, v: quickAmount(ref, food) } : null; };
@@ -293,19 +302,39 @@ function amountSheet(ref, food, parsed, entry) {
   else if (ref.t !== 'c' && ms.length) { mi = 0; qty = 1; }     /* own food or recipe: one serving, never "100" */
   else qty = parsed.count || 100;
   openSheet('<div class="row" style="margin-bottom:4px"><h1 class="grow">' + h(food.name) + '</h1>' + (resolve(ref) ? '<button class="plus star' + (isFav(ref) ? ' on' : '') + '" id="favBtn" aria-label="Favourite">' + (isFav(ref) ? '\u2605' : '\u2606') + '</button>' : '') + '</div><div class="small dim" id="per"></div>' +
-    '<div class="grid2" style="margin-top:12px"><div><label>Amount</label><input id="amt" type="number" inputmode="decimal" step="any" min="0" value="' + qty + '"></div>' +
+    '<div class="grid2" style="margin-top:12px"><div><label id="amtLabel">Amount</label><input id="amt" type="number" inputmode="decimal" step="any" min="0" value="' + qty + '"></div>' +
     '<div><label>Unit</label><select id="unit"><option value="-1">' + food.unit + '</option>' + ms.map((m, i) => '<option value="' + i + '"' + (i === mi ? ' selected' : '') + '>' + h(m[0]) + ' (' + m[1] + ' ' + food.unit + ')</option>').join('') + '</select></div></div>' +
+    '<div id="chips"></div>' +
     '<div class="card" style="margin:14px 0;background:#11151a" id="preview"></div><div id="warn"></div>' +
     '<div class="row">' + (entry ? '<button class="danger" id="del">Delete</button>' : '') + '<button class="primary grow" id="ok">' + (entry ? 'Save' : 'Add to ' + h(dayName(S.date))) + '</button></div>');
+  /* Quick picks: half, one, one and a half, two of the serving, and the whole package when it is known.
+     They answer "how much did I actually eat" without typing, whatever the label calls a serving. */
+  const sv = servingIdx(ref, ms), wp = ms.findIndex(m => m[0] === 'whole package');
+  const nice = (q, i) => i >= 0 ? Math.round(q * 100) / 100 : Math.round(q * 10) / 10;
+  let lastAmount = 0;
+  const chips = () => {
+    const i = Number($('#unit').value), q = parseFloat($('#amt').value) || 0, j = i >= 0 && i !== wp ? i : sv;
+    $('#amtLabel').textContent = i >= 0 ? 'How many' : 'How much (' + food.unit + ')';
+    if (j < 0 && wp < 0) { $('#chips').innerHTML = ''; return; }
+    let html = '<label>' + (j >= 0 ? 'Quick pick, in ' + h(ms[j][0]) + ' (' + ms[j][1] + ' ' + food.unit + ')' : 'Quick pick') + '</label><div class="chips">';
+    if (j >= 0) html += [[0.5, '\u00bd'], [1, '1'], [1.5, '1\u00bd'], [2, '2']].map(([v, t]) => '<button data-frac="' + v + '" data-m="' + j + '" class="' + (i === j && q === v ? 'on' : '') + '">' + t + '</button>').join('');
+    if (wp >= 0) html += '<button data-frac="1" data-m="' + wp + '" class="' + (i === wp && q === 1 ? 'on' : '') + '">Whole package</button>';
+    $('#chips').innerHTML = html + '</div>';
+    $('#chips').querySelectorAll('[data-frac]').forEach(b => b.onclick = () => { $('#unit').value = b.dataset.m; $('#amt').value = b.dataset.frac; calc(); chips(); });
+  };
   const calc = () => {
     const i = Number($('#unit').value), q = parseFloat($('#amt').value) || 0, amount = i >= 0 ? q * ms[i][1] : q;
+    lastAmount = amount;
     const n = F.scale(food.per100, amount);
     $('#per').textContent = F.round(amount, 'g') + ' ' + food.unit + ' · ' + food.source;
     $('#preview').innerHTML = '<div class="row"><div class="grow big num">' + Math.round(n.kcal || 0) + ' <span class="dim" style="font-size:15px;font-weight:400">kcal</span></div><div class="small dim right">P ' + one(n.protein) + ' g<br>C ' + one(n.carbs) + ' g · F ' + one(n.fat) + ' g</div></div>';
     $('#warn').innerHTML = n.kcal > 2500 ? '<div class="note">That is ' + Math.round(n.kcal) + ' kcal in one entry. Check the amount and the unit.</div>' : '';
     return { amount, qty: q, measure: i >= 0 ? ms[i][0] : null };
   };
-  $('#amt').oninput = calc; $('#unit').onchange = calc; calc();
+  $('#amt').oninput = () => { calc(); chips(); };
+  /* Changing the unit keeps the same quantity eaten: 1 serving of 175 g becomes 175 g, not 1 g. */
+  $('#unit').onchange = () => { const i = Number($('#unit').value); if (lastAmount > 0) $('#amt').value = nice(i >= 0 ? lastAmount / ms[i][1] : lastAmount, i); calc(); chips(); };
+  calc(); chips();
   if ($('#favBtn')) $('#favBtn').onclick = async () => { await toggleFav(ref); const on = isFav(ref); $('#favBtn').textContent = on ? '\u2605' : '\u2606'; $('#favBtn').classList.toggle('on', on); toast(on ? 'Added to favourites' : 'Removed from favourites'); };
   $('#ok').onclick = async () => {
     const c = calc(); if (!(c.amount > 0)) return toast('Enter an amount above zero');
@@ -377,6 +406,8 @@ function openFoodForm(id, scanNow, name) {
     '<div class="grid2"><div id="servBox"><label>Serving size</label><input id="serv" type="number" inputmode="decimal" step="any" value="' + (f ? f.serving : '') + '"></div>' +
     '<div><label>in</label><select id="sunit"><option' + (f && f.unit === 'ml' ? '' : ' selected') + '>g</option><option' + (f && f.unit === 'ml' ? ' selected' : '') + '>ml</option></select></div></div>' +
     '<label>Serving is called (optional)</label><input id="slabel" placeholder="2 cookies, 1 cup, 1 bar..." value="' + h(f ? f.servingLabel || '' : '') + '">' +
+    '<label>Whole package (optional, same unit)</label><input id="fpack" type="number" inputmode="decimal" step="any" placeholder="e.g. 500 for a 500 g tub" value="' + (f && f.pack > 0 ? f.pack : '') + '">' +
+    '<div class="small dim" style="margin:4px 2px">Fill it when one package holds more than one serving: logging the whole thing is then one tap.</div>' +
     '<h2>Per serving, as printed</h2><div class="card"><div class="grid2">' + LABEL_FIELDS.map(x => fieldBox(x, f)).join('') + '</div>' +
     '<details id="extra" style="margin-top:12px"' + (f && EXTRA_FIELDS.some(([k]) => f.vals[k] !== undefined) ? ' open' : '') + '><summary class="dim small">Added vitamins and caffeine (energy drinks, fortified foods)</summary><div class="grid2">' + EXTRA_FIELDS.map(x => fieldBox(x, f)).join('') + '</div></details></div>' +
     '<div class="row">' + (f ? '<button class="danger" id="fdel">Delete</button>' : '') + '<button class="primary grow" id="fsave">Save</button></div>');
@@ -470,7 +501,8 @@ async function saveFood(existing) {
   if (vals.kcal === undefined) return toast('Calories are needed at least');
   /* Same name as an existing food: update that one instead of creating a twin. */
   const same = existing || S.foods.find(x => F.norm(x.name) === F.norm(name));
-  const food = { id: same ? same.id : newId('u'), name, unit: $('#sunit').value, serving, servingLabel: $('#slabel').value.trim(), vals,
+  const pack = parseFloat($('#fpack').value);
+  const food = { id: same ? same.id : newId('u'), name, unit: $('#sunit').value, serving, servingLabel: $('#slabel').value.trim(), pack: pack > 0 ? pack : '', vals,
     per100: F.servingToPer100(vals, serving), source: 'label', created: same ? same.created : Date.now() };
   try {
     await dbWrite([['foods', 'put', food]]);
@@ -584,10 +616,10 @@ function renderMore() {
 function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
 function exportXlsx() {
   const labelKeys = F.LABEL_KEYS.concat(F.EXTRA_LABEL_KEYS);
-  const head = ['name', 'unit', 'serving', 'serving_name'].concat(labelKeys.map(k => k + '_per_serving'));
+  const head = ['name', 'unit', 'serving', 'serving_name', 'package'].concat(labelKeys.map(k => k + '_per_serving'));
   const sheets = [{ name: 'Log', rows: F.logTable(S.log) }, { name: 'Days', rows: F.dayTable(S.log) },
     { name: 'Recipes', rows: [['recipe', 'batch_weight_g', 'portion_g', 'ingredient', 'amount', 'unit', 'kcal_per_100g', 'protein_per_100g']].concat(S.recipes.flatMap(r => r.items.map(it => [r.name, r.weight, r.portion_g || '', it.name, it.amount, it.unit, Math.round(r.per100.kcal * 10) / 10, Math.round((r.per100.protein || 0) * 10) / 10]))) },
-    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || ''].concat(labelKeys.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
+    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || '', f.pack || ''].concat(labelKeys.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
   download('food-log-' + F.ymd(new Date()) + '.xlsx', new Blob([F.xlsx(sheets)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }
 async function saveBackup() {
