@@ -16,7 +16,8 @@ This folder is independent from the receipts app at the root of the repo. The tw
 3. The first label scan downloads the reader (about 8 MB, once). Do it on Wi-Fi.
 
 ### Three ways to log
-- **Type it**: tap **Add food** and type `130 g banana`, `2 eggs`, `poutine`. Pick the line, check the amount, **Add**. English and French both work.
+- **Type it**: tap **Add food** and type `130 g banana`, `2 eggs`, `poutine`. Pick the line, check the amount, **Add**. English and French both work. Kitchen measures work too (since 1.3.0): `2 tbsp peanut butter`, `½ cup rice`, `1/2 avocado`, `2 slices bread`, `3 small eggs`. A spoon or a cup is turned into grams with that food's own weight per ml (2 tbsp of oil is 27.4 g, not 30); the screen says so, and says when a food has no volume measure.
+- **Barcode** (since 1.3.0): **Add food > Scan barcode**, photograph the barcode. The first time, the app opens a new packaged food with the barcode filled in: photograph its Nutrition Facts table and Save. After that, the barcode goes straight to the amount screen. Typing the digits in the search box finds it too. The barcode is read on the phone and only matched against your own foods.
 - **Packaged food**: **Add food > Scan a label**, photograph the Nutrition Facts table flat and without glare, type the product name, **Save**. Boxes outlined in yellow were not read or look wrong: compare those with the package. This is done once per product.
 - **Batch cooking**: **My foods > New recipe**. Add each ingredient with its raw weight, then the cooked weight of the whole batch and the weight of one portion. After that, logging a portion is one tap.
 
@@ -27,17 +28,24 @@ When nothing is typed, the Add screen shows three lists (since 1.1.0):
 
 On every line, **+** adds it straight away with the amount you used last time (or one portion), and tapping the name lets you change the amount first.
 
+### Same food as yesterday (since 1.3.0)
+- When today is empty, the Today screen offers **Copy yesterday** (or the last day you logged, up to two weeks back) in one tap.
+- On a past day, **Copy this day to today** copies everything with the same amounts and times.
+- Tap a single line on a past day > **Log this again today**.
+- The calorie card shows your **7-day average** (calories and protein, days with nothing logged left out).
+
 ### When you ate more or less than the label's serving (since 1.2.0)
 The amount screen asks **How many** and shows quick buttons: **½, 1, 1½, 2** servings, and **Whole package** when the package size is known. To log by weight, switch the unit to **g**: the number converts by itself (1 serving of 175 g becomes 175 g), so what you ate stays the same. For a packaged food, fill **Whole package** once on its form (My foods > Packaged > the food) and eating the whole thing becomes one tap.
 
 ### Good to know
 - Restaurant dishes are only there if Health Canada lists them (poutine, pad thai, sushi, donair, hamburgers, pizza). Shawarma, for example, is not. Use the closest thing, or **Add by hand** once with numbers from the restaurant.
 - A package label only carries calories, macros, sodium, potassium, calcium and iron. For days that include packaged food, the vitamin lines show "3 of 4 items": they are a minimum.
-- Editing or deleting a recipe or a packaged food never changes what is already in the diary.
+- Editing or deleting a recipe or a packaged food never changes what is already in the diary. Changing the amount of an old line rescales the values it was logged with (since 1.3.0).
+- A recipe that includes a packaged food shows "x of y items" on vitamins: the label gave none, so the number is a minimum.
 
 ### Spreadsheet and backup (More screen)
 - **Export a spreadsheet** makes one .xlsx file with four tabs: every entry, totals per day, recipes, packaged foods. It opens in Excel or Google Sheets.
-- **Save a backup file** makes one file with everything. **Restore a backup** puts it back, on this phone or a new one. Do it now and then: if Chrome's data for this site is cleared, the diary is gone and the backup is the only copy.
+- **Save a backup file** makes one file with everything. **Restore a backup** puts it back, on this phone or a new one. Since 1.3.0 a restore adds to what is on the phone and never deletes: restoring an old file by mistake cannot erase newer entries. Do it now and then: if Chrome's data for this site is cleared, the diary is gone and the backup is the only copy.
 - The More screen says since when the data has been kept. If that date ever jumps to today, Chrome wiped it.
 
 ## For an agent or developer
@@ -63,7 +71,8 @@ Read this before changing anything, together with `../CLAUDE.md` for who the own
 
 ### Data (IndexedDB database `foodlog`, on the device)
 - `log`: one row per thing eaten. `date`, `time`, `name`, `ref`, `amount` and `unit` (g or ml, always the real unit), `qty` and `measure` when it was entered as "2 x 1 large egg", `source`, and `nut`: the nutrients of that entry, frozen at the time of logging.
-- `foods`: packaged foods. `vals` is what was printed per serving, with `serving`, `unit`, and `per100` derived from them. `pack` (optional, same unit as `serving`) is the whole package; it adds a `whole package` measure.
+- `foods`: packaged foods. `vals` is what was printed per serving, with `serving`, `unit`, and `per100` derived from them. `pack` (optional, same unit as `serving`) is the whole package; it adds a `whole package` measure. `code` (optional) is the barcode, digits only; compare with `F.normCode` (leading zeros dropped, so UPC-A and EAN-13 match).
+- `_p` (optional, on a recipe's `per100` and on a log entry's `nut`): keys whose value is a minimum because some ingredients did not give them. `F.scale` carries it, `F.sum` counts it in `partial`, the Today screen tags it like a missing value. Recipes saved before 1.3.0 do not have it until they are saved again.
 - `recipes`: `items` (ref, name, amount, unit), `batch_g` (cooked weight, may be empty), `portion_g`, the `weight` used, and `per100` of the finished dish.
 - `kv`: `targets`, `uses` and `last` (drive search ranking and the Recent list), `favs` (starred refs as `t:id` strings, in the order starred), `firstOpen`, `lastBackup`.
 
@@ -79,7 +88,11 @@ A ref is `{t, id}`: `c` = database food code, `u` = packaged food, `r` = recipe.
 - **One calculation path.** Everything is per 100 of its unit and goes through `F.scale`.
 - **The spreadsheet holds numbers, not formulas, in a real .xlsx.** His spreadsheet locale is French, which broke comma formulas and would misread CSV decimals.
 - **Never redraw a screen while he types.** It takes the keyboard away. Update only the summary.
-- **The label photo is never stored.**
+- **The label photo is never stored.** Neither is the barcode photo.
+- **A volume is not a weight.** `250 ml oats` was logged as 250 g before 1.3.0 (three times too much). A volume typed for a food kept in grams goes through `F.density` (from the food's own ml measures); with none, it is counted 1:1 and the screen says so. All amount choices go through `F.amountFor`, for the diary and for recipe ingredients alike.
+- **Today follows the clock.** An installed app stays open for days; `checkDay` moves "today" when the date changes, or a morning entry would land on yesterday.
+- **A diary line keeps its own values.** Editing its amount rescales its frozen `nut`, never the current food.
+- **Restore merges, it never wipes.**
 
 ### Getting a food in without typing (since 1.0.3)
 For foods with published numbers (a bakery, a restaurant), he does not want to type thirteen boxes. Two ways, both feeding the same `F.parseLabel` used for photos:
@@ -113,8 +126,23 @@ Built and tested in a sandbox, in desktop Chrome at phone size. Unproven until h
 3. Download of the .xlsx and backup files from the installed app on Android.
 4. The offline cache (`sw.js`) only runs over https, so the tests do not cover it.
 5. Search ranking for his own vocabulary. `STAPLES` in `logic.js` maps everyday words to the right database rows; extend it when he reports a food that is hard to find.
+6. Barcode reading uses Chrome's built-in `BarcodeDetector`, which Chrome on Android provides (through Google Play services) but desktop Linux Chromium does not: the tests play the reader. If his phone says it cannot read barcodes, typing the digits still works.
+
+### Compared with other apps (benchmark, 2026-11-18)
+| | Cronometer | MyFitnessPal | MacroFactor | This app |
+|---|---|---|---|---|
+| Barcode | free | paid only | yes | own foods only, on the phone (1.3.0) |
+| Copy a day / an item | yes | yes | yes (to today / tomorrow) | yes (1.3.0) |
+| Favourites, recents, own list | yes | favourites paid | smart history | yes (1.1.0) |
+| Label photo | no | no | yes | yes, on the phone |
+| Micronutrients | 80+ | paid | some | 37 |
+| Trends | yes | paid | yes | 7-day average only (1.3.0) |
+| Works offline, no account | no | no | no | yes |
+| AI photo / voice logging | paid | paid | yes | no, by his choice |
+
+What the others have that this app still lacks: a large branded barcode database (needs an outside service, against his independence rule), meal groups (breakfast, lunch...), and charts over weeks.
 
 ### Ideas noted, not requested
-- Barcode lookup (needs an outside service, so it conflicts with independence unless cached).
+- Barcode lookup in Open Food Facts for unknown products (outside service: conflicts with independence unless he agrees to it).
 - Automatic background backup to a folder he picks.
-- Copy a whole previous day.
+- Meal groups, and a weekly chart.

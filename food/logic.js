@@ -58,36 +58,104 @@ const F = (() => {
       .replace(/œ/g, 'oe').replace(/[^a-z0-9%]+/g, ' ').trim();
   }
   function stem(w) { return w.length > 3 && w.endsWith('s') ? w.slice(0, -1) : w; }
-  function num(s) { return parseFloat(String(s).replace(',', '.')); }
+  const FRAC = { '½': 0.5, '¼': 0.25, '¾': 0.75, '⅓': 1 / 3, '⅔': 2 / 3 };
+  /* "2", "2,5", "1/2", "1 1/2", "½", "1½" -> number */
+  function num(s) {
+    s = String(s).trim();
+    let m = s.match(/^(\d+)?\s*([½¼¾⅓⅔])$/);
+    if (m) return (m[1] ? Number(m[1]) : 0) + FRAC[m[2]];
+    m = s.match(/^(?:(\d+)\s+)?(\d+)\/(\d+)$/);
+    if (m) return (m[1] ? Number(m[1]) : 0) + Number(m[2]) / Number(m[3]);
+    return parseFloat(s.replace(',', '.'));
+  }
+  const NUM = '(\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d*\\s?[½¼¾⅓⅔]|\\d+(?:[.,]\\d+)?)';
 
+  /* Kitchen measures are Canadian metric: 1 cup = 250 ml, 1 tbsp = 15 ml, 1 tsp = 5 ml. */
   const UNIT_TO = {
     g: ['g', 1], gr: ['g', 1], gram: ['g', 1], grams: ['g', 1], gramme: ['g', 1], grammes: ['g', 1],
     kg: ['g', 1000], oz: ['g', 28.35], lb: ['g', 453.6], lbs: ['g', 453.6],
-    ml: ['ml', 1], cl: ['ml', 10], l: ['ml', 1000]
+    ml: ['ml', 1], cl: ['ml', 10], l: ['ml', 1000],
+    cup: ['ml', 250], cups: ['ml', 250], tasse: ['ml', 250], tasses: ['ml', 250],
+    tbsp: ['ml', 15], tbs: ['ml', 15], tablespoon: ['ml', 15], tablespoons: ['ml', 15],
+    tsp: ['ml', 5], teaspoon: ['ml', 5], teaspoons: ['ml', 5]
   };
-  const UNIT_RE = '(g|gr|grams?|grammes?|kg|oz|lbs?|ml|cl|l)';
+  const UNIT_RE = '(g|gr|grams?|grammes?|kg|oz|lbs?|ml|cl|l|cups?|tasses?|tbsp|tbs|tablespoons?|tsp|teaspoons?)';
+  /* Words that name a piece rather than a food: "2 slices bread" means the bread's slice measure. */
+  const PIECE_WORDS = { slice: 'slice', slices: 'slice', tranche: 'slice', tranches: 'slice', piece: 'piece', pieces: 'piece',
+    morceau: 'piece', morceaux: 'piece', medium: 'medium', moyen: 'medium', moyenne: 'medium', large: 'large', gros: 'large',
+    grosse: 'large', small: 'small', petit: 'small', petite: 'small', can: 'can', cans: 'can', canette: 'can', serving: 'serving',
+    servings: 'serving', portion: 'portion', portions: 'portion', scoop: 'scoop', scoops: 'scoop', fillet: 'fillet', filet: 'fillet',
+    cookie: 'cookie', cookies: 'cookie', bar: 'bar', bars: 'bar', muffin: 'muffin', muffins: 'muffin' };
 
-  /* "130 g banana", "130gr of banana", "banana 130g", "2 eggs", "banana"
-     -> { query, amount, unit } (weight or volume given)
-     or { query, count }        (bare number: a count of pieces or servings)
-     or { query }               (nothing but a name) */
+  /* "130 g banana", "130gr of banana", "banana 130g", "2 tbsp peanut butter", "½ cup oats",
+     "2 eggs", "2 slices bread", "banana"
+     -> { query, amount, unit }   (weight or volume given; volume is always in ml)
+     or { query, count, word }    (bare number: a count of pieces or servings; word = piece word typed, if any)
+     or { query }                 (nothing but a name) */
   function parseQuick(text) {
     const t = String(text || '').trim().replace(/\s+/g, ' ');
-    let m = t.match(new RegExp('^(\\d+(?:[.,]\\d+)?)\\s*' + UNIT_RE + '\\b\\.?\\s*(?:of |de |d\')?(.*)$', 'i'));
+    let m = t.match(new RegExp('^' + NUM + '\\s*' + UNIT_RE + '\\b\\.?\\s*(?:of |de |d\')?(.*)$', 'i'));
     if (!m) {
-      const x = t.match(new RegExp('^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*' + UNIT_RE + '\\.?$', 'i'));
+      const x = t.match(new RegExp('^(.+?)\\s+' + NUM + '\\s*' + UNIT_RE + '\\.?$', 'i'));
       if (x) m = [x[0], x[2], x[3], x[1]];
     }
     if (m) {
       const u = UNIT_TO[m[2].toLowerCase()];
       return { query: m[3].trim(), amount: Math.round(num(m[1]) * u[1] * 10) / 10, unit: u[0] };
     }
-    m = t.match(/^(\d+(?:[.,]\d+)?)\s+(?!%)(.+)$/);           // "2 eggs" but not "2% milk"
-    if (m && !/^%/.test(m[2])) return { query: m[2].trim(), count: num(m[1]) };
-    m = t.match(/^(.+?)\s+x?\s*(\d+(?:[.,]\d+)?)$/i);         // "eggs 2"
-    if (m) return { query: m[1].trim(), count: num(m[2]) };
-    return { query: t };
+    let count = null, query = t;
+    m = t.match(new RegExp('^' + NUM + '\\s+(?!%)(.+)$'));             // "2 eggs" but not "2% milk"
+    if (m && !/^%/.test(m[2])) { count = num(m[1]); query = m[2].trim(); }
+    else if ((m = t.match(/^([½¼¾⅓⅔])\s*(.+)$/))) { count = num(m[1]); query = m[2].trim(); }
+    else if ((m = t.match(/^(.+?)\s+x?\s*(\d+(?:[.,]\d+)?)$/i))) { count = num(m[2]); query = m[1].trim(); }   // "eggs 2"
+    if (count === null) return { query: t };
+    const out = { query, count };
+    const w = query.match(/^(\S+)\s+(?:of |de |d')?(.+)$/i);
+    if (w && PIECE_WORDS[w[1].toLowerCase()]) { out.word = PIECE_WORDS[w[1].toLowerCase()]; out.query = w[2].trim(); }
+    return out;
   }
+
+  /* Grams per ml of a database food, from its household measures ("250 ml" = 257.8 g). null if none. */
+  function density(measures) {
+    const ms = measures || [];
+    const m = ms.find(x => /^\d+(?:\.\d+)? ml$/.test(x[0])) || ms.find(x => /^\d+(?:\.\d+)? ml\b/.test(x[0]));
+    return m ? m[1] / parseFloat(m[0]) : null;
+  }
+  /* The measure that a piece word or a count points to. -1 if none.
+     word: "slice" picks "1 slice"; no word picks the first "1 ..." per-piece measure (not a volume). */
+  function pieceMeasure(measures, word) {
+    const ms = measures || [];
+    if (word) {
+      const hits = ms.map((m, i) => [m, i]).filter(([m]) => norm(m[0]).split(' ').map(stem).includes(word));
+      const first = hits.find(([m]) => /^1 /.test(m[0])) || hits[0];
+      if (first) return first[1];
+    }
+    return ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]));
+  }
+  /* What a parsed entry means for one food: { mi (measure index or -1), qty, note }.
+     food: { unit, measures }. own = an own food or recipe (defaults to one serving, never 100).
+     A volume typed for a food kept in grams goes through its density: 250 ml of oats is not 250 g. */
+  function amountFor(food, parsed, own) {
+    const ms = food.measures || [], p = parsed || {};
+    if (p.amount) {
+      if (p.unit === food.unit) return { mi: -1, qty: p.amount, note: '' };
+      if (p.unit === 'ml' && food.unit === 'g') {
+        const d = density(ms);
+        if (d) { const g = Math.round(p.amount * d * 10) / 10; return { mi: -1, qty: g, note: p.amount + ' ml is about ' + g + ' g of this food.' }; }
+        return { mi: -1, qty: p.amount, note: 'This food has no volume measure: ' + p.amount + ' ml was counted as ' + p.amount + ' g. Weigh it if it matters.' };
+      }
+      return { mi: -1, qty: p.amount, note: 'Counted ' + p.amount + ' ' + p.unit + ' as ' + p.amount + ' ' + food.unit + '.' };
+    }
+    if (p.measure) { const i = ms.findIndex(m => m[0] === p.measure); if (i >= 0) return { mi: i, qty: p.count || 1, note: '' }; }
+    if (p.count && ms.length) {
+      const i = own ? 0 : pieceMeasure(ms, p.word);
+      return { mi: i >= 0 ? i : 0, qty: p.count, note: '' };
+    }
+    if (own && ms.length) return { mi: 0, qty: 1, note: '' };
+    return { mi: -1, qty: p.count || 100, note: '' };
+  }
+  /* Barcodes are compared without leading zeros: a UPC-A of 12 digits and the same EAN-13 with a 0 in front match. */
+  function normCode(s) { const d = String(s || '').replace(/\D/g, ''); return d.length >= 6 ? d.replace(/^0+/, '') : ''; }
 
   /* ---------- search ---------- */
   const STOP = new Set(['of', 'de', 'du', 'des', 'la', 'le', 'les', 'the', 'a', 'an', 'un', 'une', 'and', 'et', 'with', 'avec', 'd', 'l']);
@@ -155,33 +223,41 @@ const F = (() => {
 
   /* ---------- nutrient arithmetic ---------- */
   /* per100: {key: number|null}. null means "unknown", which is not the same as 0. */
+  /* `_p` (optional) lists the keys whose value is a minimum: a recipe where some ingredients
+     did not give that nutrient (a packaged food carries no vitamins). It travels with the values. */
   function scale(per100, amount) {
     const out = {};
     for (const k of KEYS) {
       const v = per100[k];
       out[k] = (v === null || v === undefined || v === '') ? null : v * amount / 100;
     }
+    if (per100._p && per100._p.length) out._p = per100._p.slice();
     return out;
   }
-  /* Adds entries. missing[k] counts the entries that had no value for k. */
+  /* Adds entries. missing[k] counts the entries that had no value for k, partial[k] those whose value is only a minimum. */
   function sum(list) {
-    const total = {}, missing = {};
-    for (const k of KEYS) { total[k] = 0; missing[k] = 0; }
+    const total = {}, missing = {}, partial = {};
+    for (const k of KEYS) { total[k] = 0; missing[k] = 0; partial[k] = 0; }
     for (const n of list) for (const k of KEYS) {
-      if (n[k] === null || n[k] === undefined) missing[k]++; else total[k] += n[k];
+      if (n[k] === null || n[k] === undefined) missing[k]++;
+      else { total[k] += n[k]; if (n._p && n._p.includes(k)) partial[k]++; }
     }
-    return { total, missing, count: list.length };
+    return { total, missing, partial, count: list.length };
   }
   /* items: [{ per100, amount }], batch = cooked weight in g (0 or empty: the raw weights added up).
-     Returns the recipe's values per 100 g of finished dish. */
+     Returns the recipe's values per 100 g of finished dish. A nutrient that only some ingredients
+     give is summed and listed in per100._p, so the screen can say it is a minimum. */
   function recipePer100(items, batch) {
     const raw = items.reduce((a, it) => a + (Number(it.amount) || 0), 0);
     const weight = Number(batch) > 0 ? Number(batch) : raw;
     const s = sum(items.map(it => scale(it.per100, Number(it.amount) || 0)));
-    const per100 = {};
+    const per100 = {}, p = [];
     for (const k of KEYS) {
-      per100[k] = (!weight || s.missing[k] === items.length) ? null : s.total[k] / weight * 100;
+      const none = s.missing[k] === items.length;
+      per100[k] = (!weight || none) ? null : s.total[k] / weight * 100;
+      if (!none && (s.missing[k] || s.partial[k])) p.push(k);
     }
+    if (p.length) per100._p = p;
     return { per100, weight, raw };
   }
   function round(v, unit) {
@@ -292,6 +368,18 @@ const F = (() => {
     return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
   function addDays(s, n) { const d = new Date(s + 'T12:00:00'); d.setDate(d.getDate() + n); return ymd(d); }
+  /* Average per logged day over the 7 days ending on `date` (days with nothing logged are left out). */
+  function weekAverage(log, date) {
+    const from = addDays(date, -6), days = {};
+    for (const e of log) if (e.date >= from && e.date <= date) (days[e.date] = days[e.date] || []).push(e.nut);
+    const n = Object.keys(days).length, avg = {};
+    for (const k of KEYS) avg[k] = n ? Object.values(days).reduce((a, d) => a + sum(d).total[k], 0) / n : 0;
+    return { days: n, avg };
+  }
+  /* Copies diary entries to another day: new ids, same food, amount, time and frozen values. */
+  function copyEntries(entries, date, newId) {
+    return entries.map(e => Object.assign(JSON.parse(JSON.stringify(e)), { id: newId('e'), date }));
+  }
 
   /* ---------- export tables ---------- */
   function logTable(log) {
@@ -365,7 +453,8 @@ const F = (() => {
     return out;
   }
 
-  return { NUTRIENTS, KEYS, LABEL_KEYS, EXTRA_LABEL_KEYS, norm, parseQuick, indexItem, search, scale, sum, recipePer100, round,
-    parseLabel, servingToPer100, ymd, addDays, logTable, dayTable, xlsx };
+  return { NUTRIENTS, KEYS, LABEL_KEYS, EXTRA_LABEL_KEYS, norm, num, parseQuick, density, pieceMeasure, amountFor, normCode,
+    indexItem, search, scale, sum, recipePer100, round, parseLabel, servingToPer100, ymd, addDays, weekAverage, copyEntries,
+    logTable, dayTable, xlsx };
 })();
 if (typeof module !== 'undefined') module.exports = F;

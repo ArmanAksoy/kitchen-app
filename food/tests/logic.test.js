@@ -117,5 +117,61 @@ t('spreadsheet file', () => {
   if (process.argv[2]) fs.writeFileSync(process.argv[2], bytes);
 });
 t('dates', () => { assert.strictEqual(F.addDays('2026-11-01', -1), '2026-10-31'); assert.strictEqual(F.addDays('2026-12-31', 1), '2027-01-01'); });
+t('kitchen measures, fractions and piece words', () => {
+  assert.deepStrictEqual(F.parseQuick('2 tbsp peanut butter'), { query: 'peanut butter', amount: 30, unit: 'ml' });
+  assert.deepStrictEqual(F.parseQuick('½ cup oats'), { query: 'oats', amount: 125, unit: 'ml' });
+  assert.deepStrictEqual(F.parseQuick('1 1/2 cups rice'), { query: 'rice', amount: 375, unit: 'ml' });
+  assert.deepStrictEqual(F.parseQuick('1 tsp sugar'), { query: 'sugar', amount: 5, unit: 'ml' });
+  assert.deepStrictEqual(F.parseQuick('1/2 avocado'), { query: 'avocado', count: 0.5 });
+  assert.deepStrictEqual(F.parseQuick('½ avocado'), { query: 'avocado', count: 0.5 });
+  assert.deepStrictEqual(F.parseQuick('2 slices bread'), { query: 'bread', count: 2, word: 'slice' });
+  assert.deepStrictEqual(F.parseQuick('2 tranches de pain'), { query: 'pain', count: 2, word: 'slice' });
+  assert.deepStrictEqual(F.parseQuick('3 large eggs'), { query: 'eggs', count: 3, word: 'large' });
+  assert.deepStrictEqual(F.parseQuick('2 large'), { query: 'large', count: 2 });
+  assert.strictEqual(F.num('1 1/2'), 1.5); assert.strictEqual(F.num('2,5'), 2.5); assert.strictEqual(F.num('1½'), 1.5);
+});
+t('a volume typed for a food kept in grams goes through its density', () => {
+  const ms = code => CNF.foods.find(x => x[0] === code)[5];
+  const oil = F.amountFor({ unit: 'g', measures: ms(422) }, F.parseQuick('2 tbsp olive oil'));
+  assert.strictEqual(oil.mi, -1); assert.strictEqual(oil.qty, 27.4); assert.match(oil.note, /30 ml is about 27.4 g/);
+  const pb = F.amountFor({ unit: 'g', measures: ms(3309) }, F.parseQuick('2 tbsp peanut butter'));
+  assert.strictEqual(pb.qty, 32.7);
+  const oats = F.amountFor({ unit: 'g', measures: ms(1464) }, F.parseQuick('1 cup oats'));       // no volume measure: said so, not hidden
+  assert.strictEqual(oats.qty, 250); assert.match(oats.note, /no volume measure/);
+  const bread = F.amountFor({ unit: 'g', measures: ms(4066) }, F.parseQuick('2 slices bread'));
+  assert.strictEqual(ms(4066)[bread.mi][0], '1 slice'); assert.strictEqual(bread.qty, 2);
+  const egg = F.amountFor({ unit: 'g', measures: ms(125) }, F.parseQuick('3 small eggs'));
+  assert.strictEqual(ms(125)[egg.mi][0], '1 small egg');
+  const plain = F.amountFor({ unit: 'g', measures: ms(125) }, F.parseQuick('2 eggs'));
+  assert.strictEqual(ms(125)[plain.mi][0], '1 large egg');
+  const own = F.amountFor({ unit: 'g', measures: [['1 portion', 390]] }, {}, true);
+  assert.deepStrictEqual([own.mi, own.qty], [0, 1]);
+  assert.deepStrictEqual(F.amountFor({ unit: 'g', measures: ms(1704) }, {}), { mi: -1, qty: 100, note: '' });
+});
+t('a recipe with a label food says its vitamins are a minimum, it does not hide it', () => {
+  const label = F.servingToPer100({ kcal: 760, protein: 17, fat: 49, carbs: 68 }, 175);     // no vitamin C on a label
+  const r = F.recipePer100([{ per100: per100(1704), amount: 500 }, { per100: label, amount: 175 }], 0);
+  assert.ok(r.per100.vitc > 0); assert.ok(r.per100._p.includes('vitc')); assert.ok(!r.per100._p.includes('kcal'));
+  const portion = F.scale(r.per100, 200); assert.ok(portion._p.includes('vitc'));
+  const s = F.sum([portion, F.scale(per100(1704), 100)]);
+  assert.strictEqual(s.partial.vitc, 1); assert.strictEqual(s.missing.vitc, 0); assert.strictEqual(s.partial.kcal, 0);
+  const nested = F.recipePer100([{ per100: r.per100, amount: 300 }, { per100: per100(125), amount: 100 }], 0);
+  assert.ok(nested.per100._p.includes('vitc'));                                             // and it carries into a recipe that uses it
+  assert.strictEqual(F.recipePer100([{ per100: per100(1704), amount: 100 }], 0).per100._p, undefined);
+});
+t('week average counts logged days only; copying a day keeps the values', () => {
+  const e = (date, kcal) => ({ id: date + kcal, date, time: '08:00', name: 'x', amount: 100, unit: 'g', nut: F.scale({ kcal, protein: 10 }, 100) });
+  const log = [e('2026-11-10', 2000), e('2026-11-10', 500), e('2026-11-12', 1500), e('2026-11-02', 9999)];
+  const w = F.weekAverage(log, '2026-11-12');
+  assert.strictEqual(w.days, 2); assert.strictEqual(w.avg.kcal, 2000); assert.strictEqual(w.avg.protein, 15);
+  let i = 0; const c = F.copyEntries(log.slice(0, 2), '2026-11-13', p => p + (i++));
+  assert.deepStrictEqual(c.map(x => [x.id, x.date, x.nut.kcal]), [['e0', '2026-11-13', 2000], ['e1', '2026-11-13', 500]]);
+  assert.strictEqual(log[0].date, '2026-11-10');                                            // the originals are untouched
+});
+t('barcodes match with or without leading zeros', () => {
+  assert.strictEqual(F.normCode('0 60383 03552 7'), '60383035527');
+  assert.strictEqual(F.normCode('060383035527'), F.normCode('0060383035527'));
+  assert.strictEqual(F.normCode('123'), '');
+});
 console.log(n + ' logic tests passed');
 for (const q of (process.env.SHOW || '').split(';').filter(Boolean)) console.log(q, '->', top(q));

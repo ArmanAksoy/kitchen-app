@@ -65,6 +65,8 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 .chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
 .chips button{padding:8px 14px;border-radius:18px;font-size:15px}
 .chips button.on{border-color:var(--acc);color:var(--acc)}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.grid3 button{padding:12px 4px;font-size:15px}
 </style>
 </head>
 <body>
@@ -85,11 +87,11 @@ label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
 'use strict';
 /* ===================== Food log: storage and screen =====================
    All arithmetic and parsing is in logic.js (global F). The food database is cnf.js (global CNF).
-   Everything the user enters stays on this device, in IndexedDB. See ../FOOD.md. */
-const VERSION = '1.2.0';
+   Everything the user enters stays on this device, in IndexedDB. See README.md. */
+const VERSION = '1.3.0';
 const $ = s => document.querySelector(s);
 const h = s => String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
+const S = { foods: [], recipes: [], log: [], kv: {}, date: F.ymd(new Date()), today: F.ymd(new Date()), view: 'today', index: [], cnf: new Map(), foodsTab: 'recipes' };
 
 /* ---------- storage ---------- */
 const STORES = ['foods', 'recipes', 'log', 'kv'];
@@ -127,7 +129,7 @@ const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slic
 function rebuildIndex() {
   const idx = [];
   for (const r of S.recipes) idx.push(F.indexItem({ ref: { t: 'r', id: r.id }, name: r.name, alt: 'recipe recette' }));
-  for (const f of S.foods) idx.push(F.indexItem({ ref: { t: 'u', id: f.id }, name: f.name, alt: '' }));
+  for (const f of S.foods) idx.push(F.indexItem({ ref: { t: 'u', id: f.id }, name: f.name, alt: f.code ? f.code + ' ' + F.normCode(f.code) : '' }));
   S.index = idx.concat(S.cnfIndex);
 }
 const one = v => (v === null || v === undefined) ? '?' : Math.round(v * 10) / 10;
@@ -189,16 +191,20 @@ function renderToday() {
   let html = '<div class="top"><button id="prev" aria-label="Previous day">&#8249;</button><h1>' + h(dayName(S.date)) + '</h1><button id="next" aria-label="Next day">&#8250;</button></div>';
   html += '<div class="card"><div class="row"><div class="grow"><span class="big num">' + Math.round(tot.kcal) + '</span> <span class="dim">/ ' + (T.kcal.target || '') + ' kcal</span></div>' +
     '<div class="dim small right">' + (T.kcal.target ? Math.round(T.kcal.target - tot.kcal) + ' left' : '') + '</div></div>' + bar(tot.kcal, T.kcal) +
-    '<div class="macros">' + macro('protein', 'blue') + macro('carbs', 'warn') + macro('fat', '') + '</div></div>';
+    '<div class="macros">' + macro('protein', 'blue') + macro('carbs', 'warn') + macro('fat', '') + '</div>';
+  const wk = F.weekAverage(S.log, S.date);
+  if (wk.days >= 2) html += '<div class="small dim" style="margin-top:12px">7-day average: <b>' + Math.round(wk.avg.kcal) + '</b> kcal · <b>' + F.round(wk.avg.protein, 'g') + '</b> g protein <span class="small">(' + wk.days + ' days logged)</span></div>';
+  html += '</div>';
   html += '<div class="card">' + (entries.length ? '<ul class="list">' + entries.map(e =>
     '<li data-entry="' + e.id + '"><div class="grow"><div class="ell">' + h(e.name) + '</div><div class="small dim">' + h(amountText(e)) + '</div></div><div class="num right">' + Math.round(e.nut.kcal || 0) + '<span class="dim small"> kcal</span></div></li>').join('') + '</ul>'
-    : '<div class="dim">Nothing logged for this day. Tap <b>Add food</b>.</div>') + '</div>';
+    : '<div class="dim">Nothing logged for this day. Tap <b>Add food</b>.</div>') + copyOffer(entries) + '</div>';
   if (entries.length) {
     const partial = entries.filter(e => e.nut.vitc === null || e.nut.vitc === undefined).length;
     for (const [g, title] of [['detail', 'Details'], ['mineral', 'Minerals'], ['vitamin', 'Vitamins'], ['other', 'Other']]) {
       html += '<h2>' + title + '</h2><div class="card">' + F.NUTRIENTS.filter(n => n.group === g).map(n => {
         const t = T[n.key], goal = t.target || t.max, v = tot[n.key];
-        return '<div class="nut"><div>' + n.name + (s.missing[n.key] ? '<span class="tag">' + (entries.length - s.missing[n.key]) + ' of ' + entries.length + ' items</span>' : '') + '</div><div class="num">' + F.round(v, n.unit) + ' <span class="dim small">' + n.unit + '</span></div><div class="num small dim right">' + (goal ? Math.round(v / goal * 100) + '%' : '') + '</div>' + bar(v, t) + '</div>';
+        const short = s.missing[n.key] + s.partial[n.key];
+        return '<div class="nut"><div>' + n.name + (short ? '<span class="tag">' + (entries.length - short) + ' of ' + entries.length + ' items</span>' : '') + '</div><div class="num">' + F.round(v, n.unit) + ' <span class="dim small">' + n.unit + '</span></div><div class="num small dim right">' + (goal ? Math.round(v / goal * 100) + '%' : '') + '</div>' + bar(v, t) + '</div>';
       }).join('') + '</div>';
       if (g === 'detail' && partial) html += '<div class="note">' + partial + ' of today\'s ' + entries.length + ' items come from a package label, which carries no vitamins and only four minerals. Lines marked "x of y items" are a minimum.</div>';
     }
@@ -207,6 +213,33 @@ function renderToday() {
   $('#prev').onclick = () => { S.date = F.addDays(S.date, -1); render(); };
   $('#next').onclick = () => { S.date = F.addDays(S.date, 1); render(); };
   document.querySelectorAll('[data-entry]').forEach(li => li.onclick = () => editEntry(li.dataset.entry));
+  if ($('#copyDay')) $('#copyDay').onclick = () => logCopies(S.log.filter(e => e.date === $('#copyDay').dataset.from), S.today, true);
+}
+/* Batch cooking means eating the same thing day after day: copying a day is one tap.
+   Viewing an empty today: offer the last day logged in the past two weeks. Viewing a past day: offer to copy it to today. */
+function copyOffer(entries) {
+  let from = null;
+  if (S.date !== S.today && entries.length) from = S.date;
+  else if (S.date === S.today && !entries.length) {
+    for (let i = 1; i <= 14 && !from; i++) { const d = F.addDays(S.today, -i); if (S.log.some(e => e.date === d)) from = d; }
+  }
+  if (!from) return '';
+  const src = S.log.filter(e => e.date === from), kcal = Math.round(F.sum(src.map(e => e.nut)).total.kcal);
+  return '<button id="copyDay" data-from="' + from + '" style="width:100%;margin-top:12px">' + (from === S.date ? 'Copy this day to today' : 'Copy ' + h(dayName(from).toLowerCase() === 'yesterday' ? 'yesterday' : dayName(from))) +
+    ' <span class="dim small">(' + src.length + ' items, ' + kcal + ' kcal)</span></button>';
+}
+/* keepTime: a whole day keeps its times; a single "log again" takes the time of now. One transaction. */
+async function logCopies(entries, date, keepTime) {
+  if (!entries.length) return;
+  const now = new Date(), t = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+  const copies = F.copyEntries(entries, date, newId).map(e => keepTime ? e : Object.assign(e, { time: t }));
+  const last = Object.assign({}, S.kv.last), uses = Object.assign({}, S.kv.uses);
+  for (const e of copies) { const k = refKey(e.ref); uses[k] = (uses[k] || 0) + 1; last[k] = { amount: e.amount, qty: e.qty, measure: e.measure, unit: e.unit, at: Date.now() }; }
+  try {
+    await dbWrite(copies.map(e => ['log', 'put', e]).concat([['kv', 'put', { key: 'uses', value: uses }], ['kv', 'put', { key: 'last', value: last }]]));
+    S.log = S.log.concat(copies); S.kv.uses = uses; S.kv.last = last;
+    closeSheet(); S.view = 'today'; S.date = date; render(); toast(copies.length === 1 ? 'Added ' + copies[0].name + ' to today' : 'Copied ' + copies.length + ' items');
+  } catch (e) { fail(e); }
 }
 function amountText(e) {
   const base = F.round(e.amount, 'g') + ' ' + e.unit;
@@ -233,7 +266,8 @@ function renderResults() {
     const empty = { fav: 'No favourite yet. Tap the star next to anything in the other two lists, or on the amount screen.',
       mine: 'Your recipes and the packaged foods you scanned or entered will be listed here.',
       recent: 'What you log will show up here, one tap to add it again.' }[S.addTab];
-    let html = picker ? '' : '<div class="grid2" style="margin-bottom:12px"><button id="scan">Scan a label</button><button id="hand">Add by hand</button></div>';
+    let html = picker ? '' : '<div class="grid3" style="margin-bottom:12px"><button id="scan">Scan label</button><button id="bscan">Scan barcode</button><button id="hand">By hand</button></div>' +
+      '<input id="bfile" type="file" accept="image/*" capture="environment" style="display:none">';
     html += '<div class="seg">' + [['fav', '\u2605 Favourites', favs], ['mine', 'Mine', mine], ['recent', 'Recent', recent]].map(([k, n, l]) =>
       '<button data-addtab="' + k + '" class="' + (S.addTab === k ? 'on' : '') + '">' + n + ' (' + l.length + ')</button>').join('') + '</div>';
     html += '<div class="card">' + (list.length ? '<ul class="list">' + list.map((x, i) =>
@@ -241,7 +275,9 @@ function renderResults() {
       (picker ? '' : '<button class="plus star' + (isFav(x.ref) ? ' on' : '') + '" data-star="' + i + '" aria-label="Favourite">' + (isFav(x.ref) ? '\u2605' : '\u2606') + '</button><button class="plus" data-again="' + i + '" aria-label="Add again">+</button>') + '</li>').join('') + '</ul>'
       : '<div class="dim">' + empty + '</div>') + '</div>';
     box.innerHTML = html;
-    if (!picker) { $('#scan').onclick = () => openFoodForm(null, true); $('#hand').onclick = () => openFoodForm(null, false); }
+    if (!picker) { $('#scan').onclick = () => openFoodForm(null, true); $('#hand').onclick = () => openFoodForm(null, false);
+      $('#bscan').onclick = () => $('#bfile').click();
+      $('#bfile').onchange = async ev => { const file = ev.target.files[0]; ev.target.value = ''; if (file) await barcodeToFood(file); }; }
     box.querySelectorAll('[data-addtab]').forEach(b => b.onclick = () => { S.addTab = b.dataset.addtab; renderResults(); });
     box.querySelectorAll('li').forEach(li => li.onclick = async ev => {
       const x = list[li.dataset.i];
@@ -294,19 +330,16 @@ function choose(ref, food, parsed) {
 function amountSheet(ref, food, parsed, entry) {
   parsed = parsed || {};
   const ms = food.measures || [];
-  let mi = -1, qty;
+  let mi = -1, qty, note = '';
   if (entry) { mi = entry.measure ? ms.findIndex(m => m[0] === entry.measure) : -1; qty = mi >= 0 ? entry.qty : entry.amount; }
-  else if (parsed.amount) qty = parsed.amount;
-  else if (parsed.measure && ms.findIndex(m => m[0] === parsed.measure) >= 0) { mi = ms.findIndex(m => m[0] === parsed.measure); qty = parsed.count || 1; }
-  else if (parsed.count && ms.length) { mi = Math.max(0, ms.findIndex(m => /^1 (?!food guide)/.test(m[0]) && !/^\d+\s*ml\b/.test(m[0]))); qty = parsed.count; }
-  else if (ref.t !== 'c' && ms.length) { mi = 0; qty = 1; }     /* own food or recipe: one serving, never "100" */
-  else qty = parsed.count || 100;
+  else ({ mi, qty, note } = F.amountFor(food, parsed, ref.t !== 'c'));     /* own food or recipe: one serving, never "100" */
   openSheet('<div class="row" style="margin-bottom:4px"><h1 class="grow">' + h(food.name) + '</h1>' + (resolve(ref) ? '<button class="plus star' + (isFav(ref) ? ' on' : '') + '" id="favBtn" aria-label="Favourite">' + (isFav(ref) ? '\u2605' : '\u2606') + '</button>' : '') + '</div><div class="small dim" id="per"></div>' +
     '<div class="grid2" style="margin-top:12px"><div><label id="amtLabel">Amount</label><input id="amt" type="number" inputmode="decimal" step="any" min="0" value="' + qty + '"></div>' +
     '<div><label>Unit</label><select id="unit"><option value="-1">' + food.unit + '</option>' + ms.map((m, i) => '<option value="' + i + '"' + (i === mi ? ' selected' : '') + '>' + h(m[0]) + ' (' + m[1] + ' ' + food.unit + ')</option>').join('') + '</select></div></div>' +
-    '<div id="chips"></div>' +
+    '<div class="small dim" id="conv" style="margin-top:6px">' + h(note) + '</div><div id="chips"></div>' +
     '<div class="card" style="margin:14px 0;background:#11151a" id="preview"></div><div id="warn"></div>' +
-    '<div class="row">' + (entry ? '<button class="danger" id="del">Delete</button>' : '') + '<button class="primary grow" id="ok">' + (entry ? 'Save' : 'Add to ' + h(dayName(S.date))) + '</button></div>');
+    '<div class="row">' + (entry ? '<button class="danger" id="del">Delete</button>' : '') + '<button class="primary grow" id="ok">' + (entry ? 'Save' : 'Add to ' + h(dayName(S.date))) + '</button></div>' +
+    (entry && entry.date !== S.today ? '<button id="again" style="width:100%;margin-top:10px">Log this again today</button>' : ''));
   /* Quick picks: half, one, one and a half, two of the serving, and the whole package when it is known.
      They answer "how much did I actually eat" without typing, whatever the label calls a serving. */
   const sv = servingIdx(ref, ms), wp = ms.findIndex(m => m[0] === 'whole package');
@@ -331,9 +364,9 @@ function amountSheet(ref, food, parsed, entry) {
     $('#warn').innerHTML = n.kcal > 2500 ? '<div class="note">That is ' + Math.round(n.kcal) + ' kcal in one entry. Check the amount and the unit.</div>' : '';
     return { amount, qty: q, measure: i >= 0 ? ms[i][0] : null };
   };
-  $('#amt').oninput = () => { calc(); chips(); };
+  $('#amt').oninput = () => { $('#conv').textContent = ''; calc(); chips(); };
   /* Changing the unit keeps the same quantity eaten: 1 serving of 175 g becomes 175 g, not 1 g. */
-  $('#unit').onchange = () => { const i = Number($('#unit').value); if (lastAmount > 0) $('#amt').value = nice(i >= 0 ? lastAmount / ms[i][1] : lastAmount, i); calc(); chips(); };
+  $('#unit').onchange = () => { $('#conv').textContent = ''; const i = Number($('#unit').value); if (lastAmount > 0) $('#amt').value = nice(i >= 0 ? lastAmount / ms[i][1] : lastAmount, i); calc(); chips(); };
   calc(); chips();
   if ($('#favBtn')) $('#favBtn').onclick = async () => { await toggleFav(ref); const on = isFav(ref); $('#favBtn').textContent = on ? '\u2605' : '\u2606'; $('#favBtn').classList.toggle('on', on); toast(on ? 'Added to favourites' : 'Removed from favourites'); };
   $('#ok').onclick = async () => {
@@ -343,6 +376,7 @@ function amountSheet(ref, food, parsed, entry) {
       try { await dbWrite([['log', 'put', upd]]); S.log[S.log.findIndex(e => e.id === entry.id)] = upd; closeSheet(); render(); } catch (e) { fail(e); }
     } else { await addEntry(ref, food, c.amount, c.qty, c.measure); }
   };
+  if ($('#again')) $('#again').onclick = () => logCopies([entry], S.today, false);
   if (entry) $('#del').onclick = async () => {
     try { await dbWrite([['log', 'delete', entry.id]]); S.log = S.log.filter(e => e.id !== entry.id); closeSheet(); render(); } catch (e) { fail(e); }
   };
@@ -361,10 +395,13 @@ async function addEntry(ref, food, amount, qty, measure) {
 }
 function editEntry(id) {
   const e = S.log.find(x => x.id === id); if (!e) return;
-  /* The entry keeps its own numbers. If its food was deleted since, only the weight can change. */
-  const food = resolve(e.ref) || { name: e.name, unit: e.unit, source: e.source, measures: [],
-    per100: Object.fromEntries(F.KEYS.map(k => [k, e.nut[k] === null || e.nut[k] === undefined ? null : e.nut[k] / e.amount * 100])) };
-  amountSheet(e.ref, Object.assign({}, food, { name: e.name }), null, e);
+  /* The entry keeps its own numbers: changing the amount rescales what was frozen at logging time,
+     even if the recipe or food was edited or deleted since. The food only lends its measures. */
+  const cur = resolve(e.ref);
+  const per100 = Object.fromEntries(F.KEYS.map(k => [k, e.nut[k] === null || e.nut[k] === undefined ? null : e.nut[k] / e.amount * 100]));
+  if (e.nut._p) per100._p = e.nut._p;
+  const food = { name: e.name, unit: e.unit, source: e.source, per100, measures: cur && cur.unit === e.unit ? cur.measures : [] };
+  amountSheet(e.ref, food, null, e);
 }
 
 /* ===================== My foods ===================== */
@@ -395,7 +432,7 @@ const LABEL_FIELDS = [['kcal', 'Calories', 'kcal'], ['fat', 'Fat', 'g'], ['satfa
 const EXTRA_FIELDS = [['niacin', 'Niacin', 'mg'], ['pantothenic', 'Pantothenic acid', 'mg'], ['b6', 'Vitamin B6', 'mg'], ['b12', 'Vitamin B12', 'µg'], ['caffeine', 'Caffeine', 'mg']];
 const ALL_FIELDS = LABEL_FIELDS.concat(EXTRA_FIELDS);
 const fieldBox = ([k, n, u], f) => '<div id="box_' + k + '"><label>' + n + ' (' + u + ')</label><input id="v_' + k + '" type="number" inputmode="decimal" step="any" value="' + (f && f.vals[k] !== undefined && f.vals[k] !== null ? f.vals[k] : '') + '"></div>';
-function openFoodForm(id, scanNow, name) {
+function openFoodForm(id, scanNow, name, code) {
   const f = id ? S.foods.find(x => x.id === id) : null;
   openOver('<div class="top"><button id="back" aria-label="Back">&#8249;</button><h1>' + (f ? 'Edit food' : 'New packaged food') + '</h1><span style="width:44px"></span></div>' +
     '<button id="shoot" style="width:100%">' + (f ? 'Read the label again from a photo' : 'Take a photo of the Nutrition Facts table') + '</button>' +
@@ -403,6 +440,8 @@ function openFoodForm(id, scanNow, name) {
     '<details id="pasteBox" style="margin:10px 2px 0"><summary class="dim small">Or paste text: a block from a chat, or a nutrition table copied from a website</summary><textarea id="ptext" rows="5" style="margin-top:8px" placeholder="Name: ...&#10;Per 1 croissant (175 g)&#10;Calories 760&#10;Fat 49 g&#10;..."></textarea><button id="pfill" style="margin-top:8px;width:100%">Fill the form from this text</button></details>' +
     '<div id="ocr" class="small dim" style="margin:8px 2px"></div><div id="lwarn"></div>' +
     '<label>Name</label><input id="fname" placeholder="Product name" value="' + h(f ? f.name : name || '') + '">' +
+    '<label>Barcode (optional: next time, Scan barcode finds it)</label><div class="row"><input id="fcode" class="grow" inputmode="numeric" placeholder="Digits under the barcode" value="' + h(f ? f.code || '' : code || '') + '"><button id="fbscan" style="flex:none">Scan</button></div>' +
+    '<input id="fbfile" type="file" accept="image/*" capture="environment" style="display:none">' +
     '<div class="grid2"><div id="servBox"><label>Serving size</label><input id="serv" type="number" inputmode="decimal" step="any" value="' + (f ? f.serving : '') + '"></div>' +
     '<div><label>in</label><select id="sunit"><option' + (f && f.unit === 'ml' ? '' : ' selected') + '>g</option><option' + (f && f.unit === 'ml' ? ' selected' : '') + '>ml</option></select></div></div>' +
     '<label>Serving is called (optional)</label><input id="slabel" placeholder="2 cookies, 1 cup, 1 bar..." value="' + h(f ? f.servingLabel || '' : '') + '">' +
@@ -416,6 +455,9 @@ function openFoodForm(id, scanNow, name) {
   $('#file').onchange = async ev => { const file = ev.target.files[0]; ev.target.value = ''; if (file) await readLabel(file); };
   $('#pfill').onclick = () => { if ($('#ptext').value.trim()) { fillFromText($('#ptext').value); $('#pasteBox').open = false; } };
   $('#fsave').onclick = () => saveFood(f);
+  $('#fbscan').onclick = () => $('#fbfile').click();
+  $('#fbfile').onchange = async ev => { const file = ev.target.files[0]; ev.target.value = ''; if (!file) return;
+    try { const c = await readBarcode(file); if (c) { $('#fcode').value = c; toast('Barcode read'); } else toast('No barcode found in that photo. Type the digits instead.'); } catch (e) { toast(e.message); } };
   if (f) $('#fdel').onclick = async () => { try { await dbWrite([['foods', 'delete', f.id]]); S.foods = S.foods.filter(x => x.id !== f.id); rebuildIndex(); closeOver(); render(); toast('Deleted. Past diary entries keep their numbers.'); } catch (e) { fail(e); } };
   if (scanNow) $('#file').click();
 }
@@ -493,6 +535,26 @@ function shrink(file, max) {
   });
 }
 function loadScript(src) { return new Promise((res, rej) => { if (window.Tesseract) return res(); const s = document.createElement('script'); s.src = src; s.onload = res; s.onerror = () => rej(new Error('text reader not loaded')); document.head.appendChild(s); }); }
+/* Barcodes are read on the phone (Chrome's built-in reader), and matched only against his own packaged
+   foods: no outside database. The photo is never stored. Returns the digits, or null. */
+async function readBarcode(file) {
+  if (!('BarcodeDetector' in window)) throw new Error('This browser cannot read barcodes. Type the digits printed under the barcode in the search box instead.');
+  const have = await BarcodeDetector.getSupportedFormats().catch(() => []);
+  const want = ['ean_13', 'ean_8', 'upc_a', 'upc_e'].filter(f => !have.length || have.includes(f));
+  const det = new BarcodeDetector(want.length ? { formats: want } : undefined);
+  const img = await createImageBitmap(file);
+  try { const codes = await det.detect(img); return codes.map(c => F.normCode(c.rawValue)).find(Boolean) || null; }
+  finally { if (img.close) img.close(); }
+}
+async function barcodeToFood(file) {
+  let code;
+  try { code = await readBarcode(file); } catch (e) { return toast(e.message); }
+  if (!code) return toast('No barcode found in that photo. Hold the phone closer, straight, in good light.');
+  const f = S.foods.find(x => F.normCode(x.code) === code);
+  if (f) { const ref = { t: 'u', id: f.id }; return choose(ref, resolve(ref), {}); }
+  openFoodForm(null, false, '', code);
+  toast('New product. Photograph its Nutrition Facts table once; the barcode will find it after that.');
+}
 async function saveFood(existing) {
   const name = $('#fname').value.trim(), serving = parseFloat($('#serv').value), vals = {};
   for (const [k] of ALL_FIELDS) { const v = $('#v_' + k).value; if (v !== '') vals[k] = parseFloat(v); }
@@ -500,9 +562,10 @@ async function saveFood(existing) {
   if (!(serving > 0)) return toast('Enter the serving size');
   if (vals.kcal === undefined) return toast('Calories are needed at least');
   /* Same name as an existing food: update that one instead of creating a twin. */
-  const same = existing || S.foods.find(x => F.norm(x.name) === F.norm(name));
+  const code = F.normCode($('#fcode').value);
+  const same = existing || S.foods.find(x => F.norm(x.name) === F.norm(name)) || (code && S.foods.find(x => F.normCode(x.code) === code));
   const pack = parseFloat($('#fpack').value);
-  const food = { id: same ? same.id : newId('u'), name, unit: $('#sunit').value, serving, servingLabel: $('#slabel').value.trim(), pack: pack > 0 ? pack : '', vals,
+  const food = { id: same ? same.id : newId('u'), name, code, unit: $('#sunit').value, serving, servingLabel: $('#slabel').value.trim(), pack: pack > 0 ? pack : '', vals,
     per100: F.servingToPer100(vals, serving), source: 'label', created: same ? same.created : Date.now() };
   try {
     await dbWrite([['foods', 'put', food]]);
@@ -549,8 +612,9 @@ function drawRecipe() {
   document.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { keep(); R.items.splice(b.dataset.rm, 1); drawRecipe(); });
   $('#addIng').onclick = () => { keep(); const mine = R; openAdd((ref, food, parsed) => {
     if (ref.t === 'r' && ref.id === mine.id) { toast('A recipe cannot contain itself'); }
-    else { const m = (food.measures || [])[0];
-      mine.items.push({ ref, name: food.name, unit: food.unit, amount: parsed.amount || (parsed.count && m ? Math.round(parsed.count * m[1] * 10) / 10 : (ref.t !== 'c' && m ? m[1] : 100)) }); }
+    else { const a = F.amountFor(food, parsed, ref.t !== 'c'), ms = food.measures || [];     /* "2 eggs" = two egg measures, "2 tbsp oil" goes through its density */
+      mine.items.push({ ref, name: food.name, unit: food.unit, amount: a.mi >= 0 ? Math.round(a.qty * ms[a.mi][1] * 10) / 10 : a.qty });
+      if (a.note) setTimeout(() => toast(a.note), 50); }
     R = mine; setTimeout(drawRecipe, 0); }); };
   $('#doPaste').onclick = () => { keep(); pasteRecipe($('#paste').value); };
   $('#rsave').onclick = () => { keep(); saveRecipe(); };
@@ -616,10 +680,10 @@ function renderMore() {
 function download(name, blob) { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 2000); }
 function exportXlsx() {
   const labelKeys = F.LABEL_KEYS.concat(F.EXTRA_LABEL_KEYS);
-  const head = ['name', 'unit', 'serving', 'serving_name', 'package'].concat(labelKeys.map(k => k + '_per_serving'));
+  const head = ['name', 'barcode', 'unit', 'serving', 'serving_name', 'package'].concat(labelKeys.map(k => k + '_per_serving'));
   const sheets = [{ name: 'Log', rows: F.logTable(S.log) }, { name: 'Days', rows: F.dayTable(S.log) },
     { name: 'Recipes', rows: [['recipe', 'batch_weight_g', 'portion_g', 'ingredient', 'amount', 'unit', 'kcal_per_100g', 'protein_per_100g']].concat(S.recipes.flatMap(r => r.items.map(it => [r.name, r.weight, r.portion_g || '', it.name, it.amount, it.unit, Math.round(r.per100.kcal * 10) / 10, Math.round((r.per100.protein || 0) * 10) / 10]))) },
-    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.unit, f.serving, f.servingLabel || '', f.pack || ''].concat(labelKeys.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
+    { name: 'Packaged foods', rows: [head].concat(S.foods.map(f => [f.name, f.code || '', f.unit, f.serving, f.servingLabel || '', f.pack || ''].concat(labelKeys.map(k => f.vals[k] === undefined ? '' : f.vals[k])))) }];
   download('food-log-' + F.ymd(new Date()) + '.xlsx', new Blob([F.xlsx(sheets)], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
 }
 async function saveBackup() {
@@ -631,16 +695,35 @@ async function restoreBackup(file) {
   try {
     const d = JSON.parse(await file.text());
     if (d.app !== 'kitchen-food-log' || !Array.isArray(d.log) || !Array.isArray(d.foods) || !Array.isArray(d.recipes)) throw new Error('this is not a food log backup');
-    const ops = STORES.map(s => [s, 'clear']);
+    /* Merge, never wipe: what is on the phone and not in the file stays. Same id: the file's version wins.
+       Restoring an old backup by mistake can therefore not erase newer entries. */
+    const ops = [], kv = d.kv || {};
     for (const s of ['foods', 'recipes', 'log']) for (const row of d[s]) ops.push([s, 'put', row]);
-    for (const key of Object.keys(d.kv || {})) ops.push(['kv', 'put', { key, value: d.kv[key] }]);
-    await dbWrite(ops); await loadAll(); render(); toast('Restored ' + d.log.length + ' entries');
+    for (const key of Object.keys(kv)) {
+      let value = kv[key];
+      if (key === 'favs') value = Array.from(new Set((S.kv.favs || []).concat(value || [])));
+      else if (key === 'firstOpen' || key === 'lastBackup') value = key === 'firstOpen' ? Math.min(value, S.kv.firstOpen || value) : Math.max(value, S.kv.lastBackup || 0);
+      else if (key === 'last') value = Object.assign({}, value, Object.fromEntries(Object.entries(S.kv.last || {}).filter(([k, v]) => !value[k] || v.at > value[k].at)));
+      ops.push(['kv', 'put', { key, value }]);
+    }
+    const before = S.log.length;
+    await dbWrite(ops); await loadAll(); render(); toast('Restored. ' + (S.log.length - before) + ' entries added, ' + S.log.length + ' in total.');
   } catch (e) { toast('Not restored: ' + (e.message || e)); }
 }
 
 /* ===================== start ===================== */
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => { S.view = b.dataset.view; if (S.view === 'today') S.date = F.ymd(new Date()); render(); window.scrollTo(0, 0); });
-$('#fab').onclick = () => openAdd(null);
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { checkDay(); S.view = b.dataset.view; if (S.view === 'today') S.date = S.today; render(); window.scrollTo(0, 0); });
+$('#fab').onclick = () => { checkDay(); openAdd(null); };
+/* An installed app can stay open for days. When the date changes, "today" moves with it, so a morning
+   entry never lands on yesterday. The screen is redrawn only when nothing is being typed. */
+function checkDay() {
+  const t = F.ymd(new Date()); if (t === S.today) return;
+  if (S.date === S.today) S.date = t;
+  S.today = t;
+  if (!$('#over').classList.contains('on') && !$('#sheetbg').classList.contains('on')) render();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkDay(); });
+setInterval(checkDay, 60000);
 (async function start() {
   try {
     for (const f of CNF.foods) S.cnf.set(f[0], f);

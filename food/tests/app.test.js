@@ -11,6 +11,9 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
   const url = 'http://localhost:' + server.address().port + '/';
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH || undefined, args: ['--no-sandbox'] });
   const ctx = await browser.newContext({ viewport: { width: 412, height: 915 }, deviceScaleFactor: 2, acceptDownloads: true });
+  /* Chrome on Android reads barcodes on the phone (BarcodeDetector); desktop Chromium has no reader, so the test plays it. */
+  await ctx.addInitScript(() => { window.BarcodeDetector = class { static async getSupportedFormats() { return ['ean_13', 'upc_a']; }
+    async detect() { return window.__barcode ? [{ rawValue: window.__barcode }] : []; } }; });
   const page = await ctx.newPage(); const errors = [];
   page.on('pageerror', e => errors.push(String(e))); page.on('console', m => { if (m.type() === 'error' && !/Estimating resolution|Detected \d+ diacritics/.test(m.text())) errors.push(m.text()); });   // the reader's own chatter is not an error
   const shot = async n => { if (shots) await page.screenshot({ path: path.join(shots, n + '.png'), fullPage: false }); };
@@ -128,6 +131,68 @@ const server = http.createServer((q, r) => { const f = path.join(root, decodeURI
     await page.click('nav [data-view=more]'); await page.setInputFiles('#rfile', backup); await page.waitForFunction(() => /4 entries/.test(document.querySelector('#main').textContent));
     await page.setInputFiles('#rfile', path.join(__dirname, 'app.test.js')); await page.waitForFunction(() => /Not restored/.test(document.querySelector('#toast').textContent));
     await page.click('nav [data-view=today]'); assert.strictEqual(await page.locator('[data-entry]').count(), 4);
+  });
+  await step('kitchen measures: 2 tbsp of oil is weighed through its density, 2 slices picks the slice', async () => {
+    await page.click('#fab'); await page.fill('#q', '2 tbsp olive oil'); await page.click('#results li:has-text("olive")');
+    assert.strictEqual(await page.inputValue('#amt'), '27.4'); assert.match(await page.textContent('#conv'), /30 ml is about 27.4 g/);
+    await shot('7-tbsp'); await page.click('#sheetbg', { position: { x: 5, y: 5 } });
+    await page.fill('#q', '2 slices white bread'); await page.click('#results li >> nth=0');
+    assert.strictEqual(await page.inputValue('#amt'), '2'); assert.match(await page.textContent('#unit option:checked'), /1 slice/);
+    await page.click('#sheetbg', { position: { x: 5, y: 5 } }); await page.click('#back');
+  });
+  await step('copy a day to today, and log one past entry again today', async () => {
+    const today = await page.locator('[data-entry]').count();
+    await page.click('#prev'); assert.strictEqual(await page.locator('#copyDay').count(), 0);
+    await page.click('#fab'); await page.fill('#q', '2 eggs'); await page.click('#results li >> nth=0'); await ok();
+    assert.match(await page.textContent('h1'), /Yesterday/);
+    await page.click('#fab'); await page.fill('#q', '130 g banana'); await page.click('#results li >> nth=0'); await ok();
+    assert.match(await page.textContent('#copyDay'), /Copy this day to today.*2 items/); await shot('8-copy');
+    await page.click('#copyDay'); await page.waitForFunction(() => document.querySelector('h1').textContent === 'Today');
+    assert.strictEqual(await page.locator('[data-entry]').count(), today + 2);
+    await page.click('#prev'); await page.click('[data-entry]:has-text("Egg")'); await ok('#again');
+    assert.match(await page.textContent('h1'), /Today/); assert.strictEqual(await page.locator('[data-entry]').count(), today + 3);
+    assert.match(await page.textContent('.card'), /7-day average: <?b?>?\d+|7-day average: \d+/);
+    /* An empty today offers the last day that has entries. */
+    await page.evaluate(() => { S.today = F.addDays(S.today, 1); S.date = S.today; render(); });
+    assert.match(await page.textContent('#copyDay'), /Copy .*items/);
+    await page.evaluate(() => { S.today = F.addDays(S.today, -1); S.date = S.today; render(); });
+  });
+  await step('an app left open overnight moves to the new day by itself', async () => {
+    await page.evaluate(() => { S.today = F.addDays(S.today, -1); S.date = S.today; render(); });
+    assert.strictEqual(await page.textContent('h1'), 'Yesterday');
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.strictEqual(await page.textContent('h1'), 'Today');
+  });
+  await step('barcode: an unknown one opens a new food with it, a known one goes straight to the amount', async () => {
+    await page.evaluate(() => { window.__barcode = '0060383035527'; });
+    await page.click('#fab'); await page.setInputFiles('#bfile', path.join(__dirname, 'label-sample.jpg'));
+    await page.waitForSelector('#fcode'); assert.strictEqual(await page.inputValue('#fcode'), '60383035527');
+    await page.fill('#fname', 'Barcode test'); await page.fill('#serv', '100'); await page.fill('#v_kcal', '200'); await page.fill('#v_protein', '10');
+    await shot('9-barcode-form'); await page.click('#fsave'); await page.waitForSelector('#amt'); await ok();
+    await page.evaluate(() => { window.__barcode = '060383035527'; });                    // same product, printed as 12 digits
+    await page.click('#fab'); await page.setInputFiles('#bfile', path.join(__dirname, 'label-sample.jpg'));
+    await page.waitForSelector('#amt'); assert.match(await page.textContent('#sheet h1'), /Barcode test/);
+    await page.click('#sheetbg', { position: { x: 5, y: 5 } });
+    await page.fill('#q', '60383035527'); assert.match(await page.textContent('#results'), /Barcode test/);      // typing the digits finds it too
+    await page.click('#back');
+    await page.evaluate(() => { window.__barcode = ''; });
+    await page.click('#fab'); await page.setInputFiles('#bfile', path.join(__dirname, 'label-sample.jpg'));
+    await page.waitForFunction(() => /No barcode found/.test(document.querySelector('#toast').textContent)); await page.click('#back');
+  });
+  await step('editing a diary line keeps the values it was logged with, even after the food changed', async () => {
+    await page.click('nav [data-view=foods]'); await page.click('[data-tab=foods]'); await page.click('[data-food]:has-text("Barcode test")');
+    await page.fill('#v_kcal', '400'); await page.click('#fsave'); await page.waitForSelector('#over.on', { state: 'detached' });
+    assert.match(await page.textContent('[data-tab=foods]'), /Packaged \(3\)/);             // same barcode and name: updated, not duplicated
+    await page.click('nav [data-view=today]'); await page.click('[data-entry]:has-text("Barcode test")');
+    await page.fill('#amt', '2'); assert.match(await page.textContent('#preview'), /^\s*400/);
+    await page.click('#sheetbg', { position: { x: 5, y: 5 } });
+  });
+  await step('restoring an old backup never erases newer entries', async () => {
+    const before = await page.locator('[data-entry]').count();
+    await page.click('nav [data-view=more]'); await page.setInputFiles('#rfile', backup);
+    await page.waitForFunction(() => /Restored\. 0 entries added/.test(document.querySelector('#toast').textContent));
+    await page.click('nav [data-view=today]'); assert.strictEqual(await page.locator('[data-entry]').count(), before);
+    await shot('1b-today');
   });
   assert.deepStrictEqual(errors, []);
   console.log(n + ' app tests passed'); await browser.close(); server.close();
